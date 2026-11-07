@@ -8,7 +8,7 @@ import http from 'node:http'
 import { createRequire } from 'node:module'
 const require=createRequire(import.meta.url)
 const Database=require('better-sqlite3'),AdmZip=require('adm-zip')
-const {PackageService,readArchive,validateManifest,trackOf}=require('../electron/mornye/packages')
+const {PackageService,readArchive,validateManifest,parseDeferredPreviewLink,trackOf}=require('../electron/mornye/packages')
 const {mergePackageDownloadTags}=require('../electron/download/manager')
 const {rangeOf,fileResponse}=require('../electron/mornye/media')
 const {resolveKnownAlbum}=require('../electron/download/postprocess')
@@ -119,6 +119,38 @@ test('packages reject unsafe archive paths, missing downloads, and unsupported c
   // adm-zip normalizes traversal on addition; duplicate root names are also
   // rejected by the package reader independently of library extraction.
   assert.throws(()=>readArchive(Buffer.from('not a zip')))
+})
+
+test('Qobuz 1.2.27 installs with Morneye 5.3 and resolves previews lazily', async t => {
+  const {service}=await fixture(t)
+  const qobuz={...manifest,name:'qobuz-web',version:'1.2.27',minAppVersion:'5.3.0',
+    requiredRuntimeFeatures:['signedSession@3','sessionGrant@1','preparedContext@1','deferredPreview@1']}
+  assert.doesNotThrow(()=>validateManifest(qobuz))
+  assert.throws(()=>validateManifest({...qobuz,requiredRuntimeFeatures:['deferredPreview@2']}),/Unsupported runtime feature/)
+  assert.deepEqual(parseDeferredPreviewLink('mornye-preview:qobuz-web/101'),{name:'qobuz-web',id:'101'})
+  assert.throws(()=>parseDeferredPreviewLink('mornye-preview:qobuz-web/'),/Invalid/)
+  const code=[
+    'let previews=0;',
+    'registerExtension({',
+    ' initialize(){},',
+    ' searchTracks(){return {tracks:[{id:"101",name:"Signal",artists:"Artist",',
+    '    preview_url:"mornye-preview:qobuz-web/101"}]};},',
+    ' download(){return {success:false};},',
+    ' resolvePreview(input){previews++;return {preview_url:input.id==="101"',
+    '    ?"https://stream.example.com/sample.mp3":"file:///unsafe.flac"};},',
+    ' previewCount(){return previews;}',
+    '});'
+  ].join('\n')
+  const addon=await service.install({buffer:archive(qobuz,code)})
+  const tracks=await service.search(addon.key,'Signal')
+  assert.equal(tracks[0].title,'Signal')
+  assert.equal(await (await service.runtime(addon.key)).invoke('previewCount'),0,
+    'search must not resolve any preview')
+  assert.equal(await service.resolveDeferredPreview('mornye-preview:qobuz-web/101'),
+    'https://stream.example.com/sample.mp3')
+  assert.equal(await (await service.runtime(addon.key)).invoke('previewCount'),1)
+  await assert.rejects(service.resolveDeferredPreview('mornye-preview:qobuz-web/102'),
+    /no secure preview/)
 })
 
 test('file-backed media supports open, suffix, unsatisfiable ranges and byte-accurate seeking',async t=>{
