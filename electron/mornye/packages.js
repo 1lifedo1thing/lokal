@@ -11,13 +11,26 @@ const { ExtensionHost, safePath, runTool, mediaInfo } = require('./host')
 const { ExtensionRuntime } = require('./runtime')
 
 const REGISTRY = 'https://raw.githubusercontent.com/mornyeapp/Mornye-Extension/refs/heads/main/registry.json'
-const COMPAT_VERSION = '5.1.0'
-const FEATURES = { signedSession: 3, sessionRefresh: 1, sessionGrant: 1, globalAction: 1, webviewAuth: 1, downloadSegments: 1, patternedFileTransform: 1, preparedContext: 1, accountForms: 1, accountDownloadMode: 1, directMedia: 1 }
+const COMPAT_VERSION = '5.3.0'
+const FEATURES = { signedSession: 3, sessionRefresh: 1, sessionGrant: 1, globalAction: 1, webviewAuth: 1, downloadSegments: 1, patternedFileTransform: 1, preparedContext: 1, accountForms: 1, accountDownloadMode: 1, directMedia: 1, deferredPreview: 1 }
 const hash = value => crypto.createHash('sha256').update(String(value)).digest('hex')
 const keyOf = name => crypto.createHash('sha1').update(`spotiflac:${name}`).digest('hex').slice(0,10)
 function compareVersions(a,b) {
   const left=String(a || '0').split('.').map(v=>Number(v)||0),right=String(b || '0').split('.').map(v=>Number(v)||0)
   for(let i=0;i<Math.max(left.length,right.length);i++){const d=(left[i]||0)-(right[i]||0);if(d)return Math.sign(d)}return 0
+}
+// Morneye 5.3 uses opaque links for previews so search does not request a
+// preview for every result. Only explicitly requested previews are resolved.
+function parseDeferredPreviewLink(link) {
+  if (typeof link !== 'string' || !link.startsWith('mornye-preview:')) return null
+  const match = /^mornye-preview:([^/?#]+)\/([^/?#]+)$/.exec(link)
+  if (!match) throw new Error('Invalid deferred preview link')
+  let name, id
+  try { name = decodeURIComponent(match[1]); id = decodeURIComponent(match[2]) }
+  catch { throw new Error('Invalid deferred preview link') }
+  if (!/^[a-z0-9][a-z0-9_-]{0,99}$/.test(name) || !id || id.length > 500)
+    throw new Error('Invalid deferred preview link')
+  return { name, id }
 }
 function validateManifest(manifest) {
   if(!manifest || !/^[a-z0-9][a-z0-9_-]{0,99}$/.test(manifest.name || '') || typeof manifest.displayName!=='string' || !/^\d+\.\d+\.\d+(?:[-+][\w.-]+)?$/.test(manifest.version || ''))throw new Error('Invalid Mornye package manifest')
@@ -337,6 +350,25 @@ class PackageService {
     }
     await runtime.initialized
     return runtime
+  }
+  // The pseudo-URL is resolved only on demand, not during search or full
+  // track playback. Reject non-HTTPS responses to avoid trusting guest data.
+  async resolveDeferredPreview(link) {
+    const ref = parseDeferredPreviewLink(link)
+    if (!ref) return link
+    const key = keyOf(ref.name), addon = this.find(key)
+    if (!addon || addon.name !== ref.name || !addon.enabled)
+      throw new Error('Preview addon is not installed')
+    const runtime = await this.runtime(key)
+    if (!runtime.methods.includes('resolvePreview'))
+      throw new Error('Addon does not support deferred previews')
+    const result = await runtime.invoke('resolvePreview', [{id:ref.id}])
+    const url = String(result?.preview_url || '').trim()
+    let parsed
+    try { parsed = new URL(url) } catch {}
+    if (!parsed || parsed.protocol !== 'https:' || parsed.username || parsed.password)
+      throw new Error('The addon returned no secure preview')
+    return url
   }
   // A login (tokens, the cookies a verification page set) outlives restarts:
   // it's kept sealed with the addon's other credentials.
@@ -664,4 +696,4 @@ class PackageService {
 const services=new WeakMap()
 function service(db,options){let instance=services.get(db);if(!instance){instance=new PackageService(db,options);services.set(db,instance)}return instance}
 function shutdown(db){services.get(db)?.shutdown()}
-module.exports={PackageService,service,shutdown,REGISTRY,COMPAT_VERSION,FEATURES,compareVersions,validateManifest,readArchive,trackOf,keyOf}
+module.exports={PackageService,service,shutdown,REGISTRY,COMPAT_VERSION,FEATURES,compareVersions,validateManifest,parseDeferredPreviewLink,readArchive,trackOf,keyOf}
