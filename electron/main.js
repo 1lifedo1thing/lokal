@@ -677,8 +677,16 @@ app.whenReady().then(async () => {
         title: 'Choose automatic backup folder',
         properties: ['openDirectory', 'createDirectory'],
       })
-      const state = result.canceled || !result.filePaths?.[0] ? backups.status() :
-        backups.configure({ directory: result.filePaths[0] })
+      let state = backups.status()
+      if (!result.canceled && result.filePaths?.[0]) {
+        const selected = result.filePaths[0]
+        const stat = await require('node:fs/promises').stat(selected)
+        if (!stat.isDirectory()) throw new Error('Selected backup folder is not a directory.')
+        state = backups.configure({
+          directory: selected,
+          directoryIdentity: `${stat.dev}:${stat.ino}`,
+        })
+      }
       if (!result.canceled && state.frequency !== 'off') {
         setTimeout(() => backups.run().catch(e => console.warn('[backups]', e.message)), 1000).unref?.()
       }
