@@ -19,6 +19,7 @@ Object.assign(console, log.functions)
 const { autoUpdater } = require('electron-updater')
 const { createUpdateInstaller, shouldQuitOnWindowClosed } = require('./updaterInstall')
 const { initDB, getDB } = require('./ipc/db')
+const { createAutomaticBackups } = require('./automaticBackups')
 const { registerScannerHandlers, registerExtraHandlers, registerV4Handlers, AUDIO_EXTS } = require('./ipc/scanner')
 const { registerNetworkLibraryHandlers } = require('./ipc/networkLibrary')
 const { registerMixesHandlers } = require('./ipc/mixes')
@@ -628,6 +629,45 @@ app.whenReady().then(async () => {
     })
   } catch (e) { console.error('registerAtmosHandlers:', e.message) }
   try { registerSpotifyLikesHandlers(ipcMain) } catch (e) { console.error('registerSpotifyLikesHandlers:', e.message) }
+
+  // Scheduled exports run in the main process even if Settings is closed.
+  // Due work is checked on launch and periodically while Lokal is running.
+  try {
+    const backups = createAutomaticBackups({
+      db: getDB(),
+      exportData: () => require('./ipc/scanner').exportAppData(),
+      documentsPath: app.getPath('documents'),
+    })
+    ipcMain.handle('backup:status', () => backups.status())
+    ipcMain.handle('backup:configure', (_, options) => {
+      const state = backups.configure(options || {})
+      if (state.frequency !== 'off') {
+        setTimeout(() => backups.run().catch(e => console.warn('[backups]', e.message)), 1000).unref?.()
+      }
+      return state
+    })
+    ipcMain.handle('backup:chooseFolder', async () => {
+      const result = await require('electron').dialog.showOpenDialog(mainWindow, {
+        title: 'Choose automatic backup folder',
+        properties: ['openDirectory', 'createDirectory'],
+      })
+      return result.canceled || !result.filePaths?.[0] ? backups.status() :
+        backups.configure({ directory: result.filePaths[0] })
+    })
+    ipcMain.handle('backup:runNow', () => backups.run({ force: true }).catch(e => ({ ...backups.status(), error: e.message })))
+    ipcMain.handle('backup:collectPrefs', (_, prefs) => { backups.capturePrefs(prefs); return { ok: true } })
+    ipcMain.handle('backup:openFolder', async () => {
+      const directory = backups.status().directory
+      await require('node:fs/promises').mkdir(directory, { recursive: true })
+      const error = await shell.openPath(directory)
+      return error ? { error } : { ok: true }
+    })
+    setTimeout(() => backups.run().catch(e => console.warn('[backups]', e.message)), 30 * 1000).unref?.()
+    setInterval(() => backups.run().catch(e => console.warn('[backups]', e.message)), 30 * 60 * 1000).unref?.()
+  } catch (error) {
+    console.error('[backups] Could not initialize automatic backups:', error.message)
+  }
+
   try { registerAutomixHandlers(ipcMain) } catch (e) { console.error('registerAutomixHandlers:', e.message) }
   try { registerFlowHandlers(ipcMain) } catch (e) { console.error('registerFlowHandlers:', e.message) }
   try { registerCastHandlers(ipcMain, { getWindow: () => mainWindow, powerSaveBlocker }) } catch (e) { console.error('registerCastHandlers:', e.message) }
