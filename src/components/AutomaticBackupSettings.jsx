@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react'
 import { api } from '../api'
-import { collectLocalPrefs } from '../localPrefsBackup'
 import { useTranslation } from '../i18n'
 
 export default function AutomaticBackupSettings() {
@@ -10,8 +9,6 @@ export default function AutomaticBackupSettings() {
   const [error, setError] = useState('')
   useEffect(() => {
     let active = true
-    // Curated UI preferences are collected alongside the database export.
-    api.automaticBackupCollectPrefs(collectLocalPrefs()).catch(() => {})
     api.automaticBackupStatus().then(value => {
       if (active) setStatus(value)
     }).catch(e => { if (active) setError(e.message) })
@@ -59,6 +56,9 @@ export default function AutomaticBackupSettings() {
       </div>
       <p className="text-xs text-muted">{t('Last successful backup')}: {date(status?.lastSuccess)}</p>
       <p className="text-xs text-muted">{t('Backups are local, and run when the desktop app is open. They are not encrypted; use a private folder and keep a copy outside the device. Restore through Import Backup above.')}</p>
+      {!!status?.lastError && <p role="alert" className="text-xs text-red-400">
+        {t('Last scheduled backup failed')}: {status.lastError}
+      </p>}
       {!!error && <p role="alert" className="text-xs text-red-400">{error}</p>}
     </div>
   )
