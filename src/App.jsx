@@ -60,6 +60,7 @@ import ShareCardModal from './components/ShareCardModal'
 import { usePlayerStore, useAppStore } from './store/player'
 import { useShallow } from 'zustand/react/shallow'
 import { api, peekSettings } from './api'
+import { collectLocalPrefs } from './localPrefsBackup'
 import { isStationTrack, stationSongTime, RADIO_CONTEXT } from './radio/stations'
 import { pauseRadio, playRadio, radioTrackId, releaseRadio, startRadio } from './radio/radioSession'
 import { handleStationTitle, resetStationDisplay } from './radio/radioNowPlaying'
@@ -436,6 +437,30 @@ export default function App() {
   // MemoryRouter reads initialEntries only at mount; don't parse localStorage
   // again for every playback-related App render.
   const [initialViewPath] = useState(readSavedRoute)
+  useEffect(() => {
+    if (!api.isElectron) return
+    // Capture UI preferences precisely when the worker begins an export,
+    // instead of relying on a periodically cached copy.
+    const unsubscribe = api.onAutomaticBackupPrefsRequest(id => {
+      api.automaticBackupDeliverPrefs(id, collectLocalPrefs()).catch(
+        error => console.warn('[backups] Preference response failed:', error),
+      )
+    })
+    // Scheduled failures must be visible even when Settings is never opened.
+    let shown = 0
+    const reportFailure = () => {
+      api.automaticBackupStatus().then(status => {
+        if (status?.lastErrorAt && status.lastErrorAt !== shown) {
+          shown = status.lastErrorAt
+          showToast(`Automatic backup failed: ${status.lastError}. Check Data → Backup.`)
+        }
+      }).catch(() => {})
+    }
+    reportFailure()
+    const interval = setInterval(reportFailure, 60 * 1000)
+    return () => { unsubscribe?.(); clearInterval(interval) }
+  }, [])
+
   useEffect(() => api.onLibraryChanged?.(() => {
     window.dispatchEvent(new Event('lokal:refresh'))
   }), [])
