@@ -58,6 +58,7 @@ function createAutomaticBackups({
   let pendingForced = false
   let lastAttempt = 0
   let localPrefs = null
+  let cachedPrefsInvalid = false
 
   /** Return the persisted destination-specific success and failure state. */
   function status() {
@@ -101,7 +102,9 @@ function createAutomaticBackups({
    * Production always requests a fresh snapshot for every backup. */
   function capturePrefs(value) {
     localPrefs = null
+    cachedPrefsInvalid = true
     localPrefs = validatePrefs(value)
+    cachedPrefsInvalid = false
   }
 
   /** Clean up only old, abandoned temporary automatic-backup files. */
@@ -120,6 +123,9 @@ function createAutomaticBackups({
   async function writeBackup() {
     const initial = status()
     const { directory } = initial
+    if (!getPreferences && cachedPrefsInvalid) {
+      throw new Error('The last interface preference snapshot was rejected.')
+    }
     const prefs = validatePrefs(getPreferences ? await getPreferences() : localPrefs || {})
     const timestamp = new Date(now()).toISOString().replace(/[:.]/g, '-')
     const destination = path.join(directory, `${PREFIX}${timestamp}.json`)
