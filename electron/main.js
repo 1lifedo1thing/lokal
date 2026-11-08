@@ -635,6 +635,7 @@ app.whenReady().then(async () => {
   try {
     registerAutomaticBackupIpc({
       ipcMain, BrowserWindow, shell,
+      getWindow: () => mainWindow,
       dialog: require('electron').dialog,
       documentsPath: app.getPath('documents'),
       createBackups: getPreferences => createAutomaticBackups({
