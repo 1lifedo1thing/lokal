@@ -78,7 +78,7 @@ function createAutomaticBackups({
 
   /** Set cadence or selected backup folder without carrying success from
    * the previous folder into the new location. */
-  function configure({ frequency, directory } = {}) {
+  function configure({ frequency, directory, directoryIdentity } = {}) {
     if (frequency !== undefined) {
       if (frequency !== 'off' && !INTERVALS[frequency]) throw new Error('Invalid backup frequency')
       save('automatic_backup_frequency', frequency)
@@ -90,6 +90,7 @@ function createAutomaticBackups({
       const dest = path.resolve(directory)
       if (dest !== status().directory) {
         save('automatic_backup_directory', dest)
+        save('automatic_backup_directory_identity', directoryIdentity || '')
         lastAttempt = 0
         save('automatic_backup_last_error', '')
         save('automatic_backup_last_error_at', 0)
@@ -135,6 +136,10 @@ function createAutomaticBackups({
       // removable-volume mount point on a local disk.
       const st = await files.stat(directory)
       if (!st.isDirectory()) throw new Error('Selected backup folder is unavailable.')
+      const expected = read('automatic_backup_directory_identity')
+      if (expected && expected !== `${st.dev}:${st.ino}`) {
+        throw new Error('Selected backup volume changed or disconnected. Choose the folder again.')
+      }
     } else {
       await files.mkdir(directory, { recursive: true, mode: 0o700 })
     }
