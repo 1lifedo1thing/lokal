@@ -20,6 +20,7 @@ const { autoUpdater } = require('electron-updater')
 const { createUpdateInstaller, shouldQuitOnWindowClosed } = require('./updaterInstall')
 const { initDB, getDB, getStorageDir } = require('./ipc/db')
 const { createAutomaticBackups } = require('./automaticBackups')
+const { registerAutomaticBackupIpc } = require('./automaticBackupIpc')
 const { registerScannerHandlers, registerExtraHandlers, registerV4Handlers, AUDIO_EXTS } = require('./ipc/scanner')
 const { registerNetworkLibraryHandlers } = require('./ipc/networkLibrary')
 const { registerMixesHandlers } = require('./ipc/mixes')
@@ -630,80 +631,19 @@ app.whenReady().then(async () => {
   } catch (e) { console.error('registerAtmosHandlers:', e.message) }
   try { registerSpotifyLikesHandlers(ipcMain) } catch (e) { console.error('registerSpotifyLikesHandlers:', e.message) }
 
-  // Main process owns scheduling; heavy exports execute in a worker thread.
+  // Schedule in Electron; worker threads perform the heavy SQLite export.
   try {
-    const requests = new Map()
-    const requestFreshPreferences = async () => {
-      const win = BrowserWindow.getAllWindows().find(w =>
-        !w.isDestroyed() && !w.webContents.isDestroyed() &&
-        !w.webContents.isLoadingMainFrame(),
-      )
-      if (!win) throw new Error('Open a Lokal window to capture current backup preferences.')
-      const id = require('node:crypto').randomUUID()
-      return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          requests.delete(id)
-          reject(new Error('Lokal did not respond with current backup preferences.'))
-        }, 8000)
-        requests.set(id, { senderId: win.webContents.id, resolve, reject, timeout })
-        try { win.webContents.send('backup:requestPrefs', id) }
-        catch (e) { clearTimeout(timeout); requests.delete(id); reject(e) }
-      })
-    }
-    const backups = createAutomaticBackups({
-      db: getDB(),
-      dbPath: path.join(getStorageDir(), 'lokal.db'),
-      getPreferences: requestFreshPreferences,
+    registerAutomaticBackupIpc({
+      ipcMain, BrowserWindow, shell,
+      dialog: require('electron').dialog,
       documentsPath: app.getPath('documents'),
+      createBackups: getPreferences => createAutomaticBackups({
+        db: getDB(),
+        dbPath: path.join(getStorageDir(), 'lokal.db'),
+        getPreferences,
+        documentsPath: app.getPath('documents'),
+      }),
     })
-    ipcMain.handle('backup:deliverPrefs', (event, { id, prefs } = {}) => {
-      const request = requests.get(id)
-      if (!request || request.senderId !== event.sender.id) return { ok: false }
-      clearTimeout(request.timeout)
-      requests.delete(id)
-      request.resolve(prefs)
-      return { ok: true }
-    })
-    ipcMain.handle('backup:status', () => backups.status())
-    ipcMain.handle('backup:configure', (_, options) => {
-      const state = backups.configure(options || {})
-      if (state.frequency !== 'off') {
-        setTimeout(() => backups.run().catch(e => console.warn('[backups]', e.message)), 1000).unref?.()
-      }
-      return state
-    })
-    ipcMain.handle('backup:chooseFolder', async () => {
-      const result = await require('electron').dialog.showOpenDialog(mainWindow, {
-        title: 'Choose automatic backup folder',
-        properties: ['openDirectory', 'createDirectory'],
-      })
-      let state = backups.status()
-      if (!result.canceled && result.filePaths?.[0]) {
-        const selected = result.filePaths[0]
-        const stat = await require('node:fs/promises').stat(selected)
-        if (!stat.isDirectory()) throw new Error('Selected backup folder is not a directory.')
-        state = backups.configure({
-          directory: selected,
-          directoryIdentity: `${stat.dev}:${stat.ino}`,
-        })
-      }
-      if (!result.canceled && state.frequency !== 'off') {
-        setTimeout(() => backups.run().catch(e => console.warn('[backups]', e.message)), 1000).unref?.()
-      }
-      return state
-    })
-    ipcMain.handle('backup:runNow', () => backups.run({ force: true }).catch(e => ({ ...backups.status(), error: e.message })))
-    ipcMain.handle('backup:openFolder', async () => {
-      const directory = backups.status().directory
-      // Never create the user's custom directory if its drive was unplugged.
-      if (directory === path.resolve(app.getPath('documents'), 'Lokal Backups')) {
-        await require('node:fs/promises').mkdir(directory, { recursive: true })
-      }
-      const error = await shell.openPath(directory)
-      return error ? { error } : { ok: true }
-    })
-    setTimeout(() => backups.run().catch(e => console.warn('[backups]', e.message)), 30 * 1000).unref?.()
-    setInterval(() => backups.run().catch(e => console.warn('[backups]', e.message)), 30 * 60 * 1000).unref?.()
   } catch (error) {
     console.error('[backups] Could not initialize automatic backups:', error.message)
   }
