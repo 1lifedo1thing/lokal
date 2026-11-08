@@ -389,6 +389,13 @@ export const api = {
     return r
   }),
   exportAllData: () => isE() ? el().exportAllData() : apiFetch('/settings/export-all'),
+  automaticBackupStatus: () => isE() ? el().automaticBackupStatus() : Promise.resolve({ frequency: 'off' }),
+  automaticBackupConfigure: (options) => isE() ? el().automaticBackupConfigure(options) : Promise.resolve({ error: 'Desktop app only.' }),
+  automaticBackupChooseFolder: () => isE() ? el().automaticBackupChooseFolder() : Promise.resolve({ error: 'Desktop app only.' }),
+  automaticBackupRunNow: () => isE() ? el().automaticBackupRunNow() : Promise.resolve({ error: 'Desktop app only.' }),
+  automaticBackupOpenFolder: () => isE() ? el().automaticBackupOpenFolder() : Promise.resolve({ error: 'Desktop app only.' }),
+  automaticBackupCollectPrefs: (prefs) => isE() ? el().automaticBackupCollectPrefs(prefs) : Promise.resolve({ ok: false }),
+
   importAllData: (payload) => isE() ? el().importAllData(payload) : apiFetch('/settings/import-all', { method:'POST', body: payload }),
   factoryReset: () => isE() ? el().factoryReset() : apiFetch('/settings/factory-reset', { method:'POST' }),
   clearTracks: () => isE() ? el().clearTracks() : apiFetch('/settings/clear-tracks', { method:'POST' }),
