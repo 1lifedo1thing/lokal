@@ -2547,5 +2547,7 @@ function registerV4Handlers(ipcMain) {
 
 
 // Reuse this bounded, failure-reporting walker for watcher catch-up.
+// Reuse the exact manual-import-compatible export for scheduled backups.
+module.exports.exportAppData = exportAppData
 module.exports.walkDir = walkDir
 module.exports.registerV4Handlers = registerV4Handlers
