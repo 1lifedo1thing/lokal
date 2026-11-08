@@ -60,6 +60,7 @@ import ShareCardModal from './components/ShareCardModal'
 import { usePlayerStore, useAppStore } from './store/player'
 import { useShallow } from 'zustand/react/shallow'
 import { api, peekSettings } from './api'
+import { collectLocalPrefs } from './localPrefsBackup'
 import { isStationTrack, stationSongTime, RADIO_CONTEXT } from './radio/stations'
 import { pauseRadio, playRadio, radioTrackId, releaseRadio, startRadio } from './radio/radioSession'
 import { handleStationTitle, resetStationDisplay } from './radio/radioNowPlaying'
@@ -436,6 +437,16 @@ export default function App() {
   // MemoryRouter reads initialEntries only at mount; don't parse localStorage
   // again for every playback-related App render.
   const [initialViewPath] = useState(readSavedRoute)
+  useEffect(() => {
+    if (!api.isElectron) return
+    // Cache curated UI-only settings for main-process scheduled exports. The
+    // renderer is not required to stay on the Settings page.
+    const collect = () => api.automaticBackupCollectPrefs(collectLocalPrefs()).catch(() => {})
+    collect()
+    const interval = setInterval(collect, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
+
   useEffect(() => api.onLibraryChanged?.(() => {
     window.dispatchEvent(new Event('lokal:refresh'))
   }), [])
