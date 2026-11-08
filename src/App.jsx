@@ -439,12 +439,26 @@ export default function App() {
   const [initialViewPath] = useState(readSavedRoute)
   useEffect(() => {
     if (!api.isElectron) return
-    // Cache curated UI-only settings for main-process scheduled exports. The
-    // renderer is not required to stay on the Settings page.
-    const collect = () => api.automaticBackupCollectPrefs(collectLocalPrefs()).catch(() => {})
-    collect()
-    const interval = setInterval(collect, 5 * 60 * 1000)
-    return () => clearInterval(interval)
+    // Capture UI preferences precisely when the worker begins an export,
+    // instead of relying on a periodically cached copy.
+    const unsubscribe = api.onAutomaticBackupPrefsRequest(id => {
+      api.automaticBackupDeliverPrefs(id, collectLocalPrefs()).catch(
+        error => console.warn('[backups] Preference response failed:', error),
+      )
+    })
+    // Scheduled failures must be visible even when Settings is never opened.
+    let shown = 0
+    const reportFailure = () => {
+      api.automaticBackupStatus().then(status => {
+        if (status?.lastErrorAt && status.lastErrorAt !== shown) {
+          shown = status.lastErrorAt
+          showToast(`Automatic backup failed: ${status.lastError}. Check Data → Backup.`)
+        }
+      }).catch(() => {})
+    }
+    reportFailure()
+    const interval = setInterval(reportFailure, 60 * 1000)
+    return () => { unsubscribe?.(); clearInterval(interval) }
   }, [])
 
   useEffect(() => api.onLibraryChanged?.(() => {
