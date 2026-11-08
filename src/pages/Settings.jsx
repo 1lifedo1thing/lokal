@@ -6,6 +6,7 @@ import { KEYBOARD_SHORTCUTS } from '../useKeyboardShortcuts'
 import SplitWordsSettings from '../components/SplitWordsSettings'
 import { normalizeSidebarCardLayout } from '../sideCardView'
 import { collectLocalPrefs, restoreLocalPrefs } from '../localPrefsBackup'
+import AutomaticBackupSettings from '../components/AutomaticBackupSettings'
 import AppTabsSettings from '../components/AppTabsSettings'
 import { statePersistenceEnabled, setStatePersistenceEnabled, writeSavedRoute } from '../statePersistence.mjs'
 import { APP_LANGUAGES, useTranslation } from '../i18n'
@@ -2797,6 +2798,7 @@ activeCategory === 'data' ? usersTried
             <RefreshCcw size={13} /> {importingAllData ? t('Importing...') : t('Import')}
           </button>
         </Row>
+        {api.isElectron && <AutomaticBackupSettings />}
       </Section>
       )}
 
