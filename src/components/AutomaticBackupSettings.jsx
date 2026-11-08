@@ -55,7 +55,7 @@ export default function AutomaticBackupSettings() {
         <button disabled={!status || busy} className="px-3 py-2 bg-card border border-border rounded-lg text-sm disabled:opacity-50"
           onClick={() => action(() => api.automaticBackupRunNow())}>{busy ? t('Working…') : t('Back up now')}</button>
         <button disabled={!status || busy} className="px-3 py-2 bg-card border border-border rounded-lg text-sm disabled:opacity-50"
-          onClick={() => action(() => api.automaticBackupOpenFolder())}>{t('Open backup folder')}</button>
+          onClick={() => action(async () => { const result = await api.automaticBackupOpenFolder(); if (result?.error) throw new Error(result.error); return api.automaticBackupStatus() })}>{t('Open backup folder')}</button>
       </div>
       <p className="text-xs text-muted">{t('Last successful backup')}: {date(status?.lastSuccess)}</p>
       <p className="text-xs text-muted">{t('Backups are local, and run when the desktop app is open. They are not encrypted; use a private folder and keep a copy outside the device. Restore through Import Backup above.')}</p>
