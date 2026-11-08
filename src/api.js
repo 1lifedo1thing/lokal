@@ -394,7 +394,8 @@ export const api = {
   automaticBackupChooseFolder: () => isE() ? el().automaticBackupChooseFolder() : Promise.resolve({ error: 'Desktop app only.' }),
   automaticBackupRunNow: () => isE() ? el().automaticBackupRunNow() : Promise.resolve({ error: 'Desktop app only.' }),
   automaticBackupOpenFolder: () => isE() ? el().automaticBackupOpenFolder() : Promise.resolve({ error: 'Desktop app only.' }),
-  automaticBackupCollectPrefs: (prefs) => isE() ? el().automaticBackupCollectPrefs(prefs) : Promise.resolve({ ok: false }),
+  automaticBackupDeliverPrefs: (id, prefs) => isE() ? el().automaticBackupDeliverPrefs(id, prefs) : Promise.resolve({ ok: false }),
+  onAutomaticBackupPrefsRequest: (fn) => isE() ? el().onAutomaticBackupPrefsRequest(fn) : () => {},
 
   importAllData: (payload) => isE() ? el().importAllData(payload) : apiFetch('/settings/import-all', { method:'POST', body: payload }),
   factoryReset: () => isE() ? el().factoryReset() : apiFetch('/settings/factory-reset', { method:'POST' }),
