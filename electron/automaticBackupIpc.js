@@ -8,12 +8,13 @@ const { randomUUID } = require('node:crypto')
 /** Connect main-process backup service to the preload renderer bridge. */
 function registerAutomaticBackupIpc({
   ipcMain, BrowserWindow, dialog, shell, documentsPath, createBackups,
-  schedule = true,
+  getWindow = () => null, schedule = true,
 }) {
   const requests = new Map()
   async function requestFreshPreferences() {
-    const win = BrowserWindow.getAllWindows().find(w =>
-      !w.isDestroyed() && !w.webContents.isDestroyed() &&
+    const candidates = [getWindow(), ...BrowserWindow.getAllWindows()]
+    const win = candidates.find(w =>
+      w && !w.isDestroyed() && !w.webContents.isDestroyed() &&
       !w.webContents.isLoadingMainFrame(),
     )
     if (!win) throw new Error('Open a Lokal window to capture current backup preferences.')
