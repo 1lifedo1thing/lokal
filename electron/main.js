@@ -18,7 +18,7 @@ Object.assign(console, log.functions)
 
 const { autoUpdater } = require('electron-updater')
 const { createUpdateInstaller, shouldQuitOnWindowClosed } = require('./updaterInstall')
-const { initDB, getDB } = require('./ipc/db')
+const { initDB, getDB, getStorageDir } = require('./ipc/db')
 const { createAutomaticBackups } = require('./automaticBackups')
 const { registerScannerHandlers, registerExtraHandlers, registerV4Handlers, AUDIO_EXTS } = require('./ipc/scanner')
 const { registerNetworkLibraryHandlers } = require('./ipc/networkLibrary')
@@ -630,13 +630,39 @@ app.whenReady().then(async () => {
   } catch (e) { console.error('registerAtmosHandlers:', e.message) }
   try { registerSpotifyLikesHandlers(ipcMain) } catch (e) { console.error('registerSpotifyLikesHandlers:', e.message) }
 
-  // Scheduled exports run in the main process even if Settings is closed.
-  // Due work is checked on launch and periodically while Lokal is running.
+  // Main process owns scheduling; heavy exports execute in a worker thread.
   try {
+    const requests = new Map()
+    const requestFreshPreferences = async () => {
+      const win = BrowserWindow.getAllWindows().find(w =>
+        !w.isDestroyed() && !w.webContents.isDestroyed() &&
+        !w.webContents.isLoadingMainFrame(),
+      )
+      if (!win) throw new Error('Open a Lokal window to capture current backup preferences.')
+      const id = require('node:crypto').randomUUID()
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          requests.delete(id)
+          reject(new Error('Lokal did not respond with current backup preferences.'))
+        }, 8000)
+        requests.set(id, { senderId: win.webContents.id, resolve, reject, timeout })
+        try { win.webContents.send('backup:requestPrefs', id) }
+        catch (e) { clearTimeout(timeout); requests.delete(id); reject(e) }
+      })
+    }
     const backups = createAutomaticBackups({
       db: getDB(),
-      exportData: () => require('./ipc/scanner').exportAppData(),
+      dbPath: path.join(getStorageDir(), 'lokal.db'),
+      getPreferences: requestFreshPreferences,
       documentsPath: app.getPath('documents'),
+    })
+    ipcMain.handle('backup:deliverPrefs', (event, { id, prefs } = {}) => {
+      const request = requests.get(id)
+      if (!request || request.senderId !== event.sender.id) return { ok: false }
+      clearTimeout(request.timeout)
+      requests.delete(id)
+      request.resolve(prefs)
+      return { ok: true }
     })
     ipcMain.handle('backup:status', () => backups.status())
     ipcMain.handle('backup:configure', (_, options) => {
@@ -651,14 +677,20 @@ app.whenReady().then(async () => {
         title: 'Choose automatic backup folder',
         properties: ['openDirectory', 'createDirectory'],
       })
-      return result.canceled || !result.filePaths?.[0] ? backups.status() :
+      const state = result.canceled || !result.filePaths?.[0] ? backups.status() :
         backups.configure({ directory: result.filePaths[0] })
+      if (!result.canceled && state.frequency !== 'off') {
+        setTimeout(() => backups.run().catch(e => console.warn('[backups]', e.message)), 1000).unref?.()
+      }
+      return state
     })
     ipcMain.handle('backup:runNow', () => backups.run({ force: true }).catch(e => ({ ...backups.status(), error: e.message })))
-    ipcMain.handle('backup:collectPrefs', (_, prefs) => { backups.capturePrefs(prefs); return { ok: true } })
     ipcMain.handle('backup:openFolder', async () => {
       const directory = backups.status().directory
-      await require('node:fs/promises').mkdir(directory, { recursive: true })
+      // Never create the user's custom directory if its drive was unplugged.
+      if (directory === path.resolve(app.getPath('documents'), 'Lokal Backups')) {
+        await require('node:fs/promises').mkdir(directory, { recursive: true })
+      }
       const error = await shell.openPath(directory)
       return error ? { error } : { ok: true }
     })
