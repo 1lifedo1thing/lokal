@@ -112,6 +112,20 @@ def marked_body(release, version, sha):
     return MARKER.sub('', release.get('body') or '').rstrip() + f'\n\n<!-- lokal-desktop version:{version} source:{sha} -->\n'
 
 
+def preserve_compare_links(github, body):
+    def replace(match):
+        commits = []
+        for tag in match.groups()[1:]:
+            target = github.api(f'git/ref/tags/{tag}')['object']
+            while target['type'] == 'tag':
+                target = github.api(f'git/tags/{target["sha"]}')['object']
+            if target['type'] != 'commit' or not re.fullmatch(r'[0-9a-f]{40}', target['sha']):
+                raise ValueError('Changelog tags must resolve to commits before deletion')
+            commits.append(target['sha'])
+        return match[1] + '...'.join(commits)
+    return re.sub(r'(https://github\.com/[^/]+/[^/]+/compare/)(v\d+(?:\.\d+)+)\.\.\.(v\d+(?:\.\d+)+)', replace, body)
+
+
 def promote(github, staged, channel, version, sha):
     if channel not in ('desktop', 'nightly') or not re.fullmatch(r'[0-9a-f]{40}', sha):
         raise ValueError('Invalid rolling channel/source')
@@ -183,6 +197,8 @@ def main():
             verify(release, version)
             print(json.dumps({'release': release['id'], 'channel': args.channel, 'version': version, 'sha': sha}))
             return
+        if args.command == 'consolidate':
+            release['body'] = preserve_compare_links(github, release.get('body') or '')
         promote(github, release, args.channel, version, sha)
         cleanup(github)
 

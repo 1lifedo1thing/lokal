@@ -499,7 +499,7 @@ jobs:
                 '',
                 contributors.size ? `Contributors: ${[...contributors].map(u => '@' + u).join(', ')}` : '',
                 '',
-                `**Full Changelog**: https://github.com/${owner}/${repo}/compare/${previous}...${tag}`,
+                `**Full Changelog**: https://github.com/${owner}/${repo}/compare/${previous}...${process.env.GITHUB_SHA}`,
               ].join('\n');
             };
 
@@ -507,14 +507,11 @@ jobs:
             try {
               body = await notes();
             } catch (err) {
-              // Fall back to GitHub's own list of PR titles.
-              core.warning(`Writing release notes from the PRs failed (${err.message}); using GitHub's.`);
-              const response = await github.rest.repos.generateReleaseNotes({
-                owner, repo,
-                tag_name: process.env.GITHUB_SHA,
-                ...(previous ? { previous_tag_name: previous } : {}),
-              });
-              body = response.data.body;
+              // Neither endpoint needs a version tag to exist. A manually
+              // selected rebuild can also have no commits since publication.
+              core.warning(`Writing release notes from PRs failed (${err.message}); using commit subjects.`);
+              const subjects = sh(previous ? `git log --format=%s ${previous}..HEAD` : 'git log -20 --format=%s').trim();
+              body = "## What's Changed\n\n" + (subjects ? subjects.split('\n').map(s => `- ${s}`).join('\n') : '- Maintenance release.');
             }
             core.setOutput('body', body);
 

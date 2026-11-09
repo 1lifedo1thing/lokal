@@ -127,6 +127,14 @@ class DesktopReleaseTests(unittest.TestCase):
             releases.cleanup(github)
         self.assertEqual(github.calls, [])
 
+    def test_changelog_links_survive_version_tag_cleanup(self):
+        github = FakeGitHub()
+        with patch.object(github, 'api', side_effect=[{'object': {'type': 'commit', 'sha': SHA}},
+                                                     {'object': {'type': 'commit', 'sha': NEW_SHA}}]):
+            body = releases.preserve_compare_links(github,
+                'Notes\nhttps://github.com/lokal-music/desktop/compare/v14.3.0...v14.3.1')
+        self.assertEqual(body, f'Notes\nhttps://github.com/lokal-music/desktop/compare/{SHA}...{NEW_SHA}')
+
     def test_build_workflows_are_manual_and_share_publication_lock(self):
         import yaml
         root = Path(__file__).resolve().parents[1]
