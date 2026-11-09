@@ -4,6 +4,7 @@ on:
     paths:
       - .github/workflows/release.yml
       - .github/workflows/nightly.yml
+      - .github/workflows/publish-desktop-draft.yml
       - .github/workflows/desktop-releases-ci.yml
       - scripts/desktop_releases.py
       - scripts/test_desktop_releases.py
@@ -13,6 +14,7 @@ on:
     paths:
       - .github/workflows/release.yml
       - .github/workflows/nightly.yml
+      - .github/workflows/publish-desktop-draft.yml
       - .github/workflows/desktop-releases-ci.yml
       - scripts/desktop_releases.py
       - scripts/test_desktop_releases.py

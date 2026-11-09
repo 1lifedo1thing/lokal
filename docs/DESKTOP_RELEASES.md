@@ -8,7 +8,9 @@ The version advances from the published stable version and `package.json`, which
 
 Completed artifacts are uploaded to a staging draft first. Publication verifies the platform packages and four updater manifests, then replaces the rolling release. An unsuccessful promotion restores the previous public release/tag. Cleanup runs after publication and preserves intentional drafts and their tags. Choosing draft mode leaves the existing stable release available; rerunning failed jobs reuses that run's version and source.
 
-To publish a reviewed draft into the rolling channel without rebuilding, run `python3 scripts/desktop_releases.py promote --tag v14.3.2 --version 14.3.2` with its version. The helper reads the pinned source SHA from the draft. This also performs the rolling-tag switch and cleanup.
+To publish a reviewed draft or recover a failed publication without rebuilding, use **Actions → Publish Desktop Draft → Run workflow** on `main`. Enter its release ID and application version, and choose the channel. The helper reads the pinned source SHA from the draft, verifies its assets, then switches the rolling tag and cleans superseded releases. Stable drafts must be newer than the published version.
+
+The build actions pass the upload action's release ID directly: unpublished GitHub drafts cannot be fetched through the public release-by-tag endpoint. The CLI also supports `python3 scripts/desktop_releases.py promote --tag v14.3.2 --version 14.3.2`; it finds the draft through the authenticated release listing.
 
 The installed stable Electron updater reads `latest*.yml` through GitHub's latest stable release, so a rolling tag does not replace version comparisons. Nightlies remain prereleases and do not become the stable update. Nightly builds are manual through **Build Lokal Nightly** and replace the same `nightly` page, regardless of the source ref.
 

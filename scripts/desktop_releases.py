@@ -112,6 +112,20 @@ def marked_body(release, version, sha):
     return MARKER.sub('', release.get('body') or '').rstrip() + f'\n\n<!-- lokal-desktop version:{version} source:{sha} -->\n'
 
 
+def staged_release(github, tag, release_id=None):
+    # GitHub's releases/tags endpoint excludes unpublished drafts, even when
+    # their metadata already has tag_name. Prefer the upload action's ID.
+    if release_id is not None:
+        release = github.api(f'releases/{release_id}')
+        if release['tag_name'] != tag:
+            raise ValueError('The uploaded release ID does not match the requested tag')
+        return release
+    matches = [release for release in github.releases() if release['tag_name'] == tag]
+    if len(matches) != 1:
+        raise ValueError(f'Expected exactly one release/draft for {tag}')
+    return matches[0]
+
+
 def preserve_compare_links(github, body):
     def replace(match):
         commits = []
@@ -132,6 +146,8 @@ def promote(github, staged, channel, version, sha):
     verify(staged, version)
     releases = github.releases()
     old = next((r for r in releases if r['tag_name'] == channel and r['id'] != staged['id']), None)
+    if old and channel == 'desktop' and version_tuple(version) <= version_tuple(identity(old)[0]):
+        raise ValueError('The stable draft must be newer than the published desktop release')
     old_sha = identity(old)[1] if old else None
     # Keep the old release/assets recoverable until the replacement publishes.
     if old:
@@ -180,6 +196,7 @@ def main():
     parser.add_argument('--bump', choices=['patch', 'minor', 'major'], default='patch')
     parser.add_argument('--version', default='')
     parser.add_argument('--tag')
+    parser.add_argument('--release-id', type=int)
     parser.add_argument('--sha')
     parser.add_argument('--channel', choices=['desktop', 'nightly'], default='desktop')
     parser.add_argument('--dry-run', action='store_true')
@@ -190,7 +207,7 @@ def main():
     elif args.command == 'cleanup':
         cleanup(github, args.dry_run)
     else:
-        release = github.api(f'releases/tags/{args.tag}')
+        release = staged_release(github, args.tag, args.release_id)
         version = args.version or args.tag.removeprefix('v')
         target = release.get('target_commitish', '')
         sha = args.sha or (target if re.fullmatch(r'[0-9a-f]{40}', target) else

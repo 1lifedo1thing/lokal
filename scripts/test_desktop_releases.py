@@ -54,6 +54,30 @@ class FakeGitHub:
 
 
 class DesktopReleaseTests(unittest.TestCase):
+    def test_uploaded_draft_is_resolved_by_id_without_public_tag_lookup(self):
+        draft = package(2, '14.3.2', draft=True)
+        github = FakeGitHub(draft)
+        self.assertEqual(releases.staged_release(github, 'v14.3.2', 2), draft)
+        self.assertEqual(github.calls, [('releases/2', 'GET', None)])
+
+    def test_reviewed_draft_can_be_found_in_authenticated_release_listing(self):
+        draft = package(2, '14.3.2', draft=True)
+        github = FakeGitHub(package(1, '14.3.1', 'desktop'), draft)
+        self.assertEqual(releases.staged_release(github, 'v14.3.2'), draft)
+        self.assertEqual(github.calls, [])
+
+    def test_wrong_upload_id_cannot_promote_another_tag(self):
+        github = FakeGitHub(package(2, '14.3.2', draft=True))
+        with self.assertRaisesRegex(ValueError, 'does not match'):
+            releases.staged_release(github, 'v14.4.0', 2)
+
+    def test_old_review_draft_cannot_downgrade_stable_release(self):
+        draft = package(2, '14.3.0', draft=True)
+        github = FakeGitHub(package(1, '14.3.1', 'desktop'), draft)
+        with self.assertRaisesRegex(ValueError, 'must be newer'):
+            releases.promote(github, draft, 'desktop', '14.3.0', NEW_SHA)
+        self.assertEqual(github.calls, [])
+
     def test_versions_advance_from_published_release_even_when_source_manifest_is_older(self):
         self.assertEqual(releases.plan('14.3.1', '14.3.2'), '14.3.3')
         self.assertEqual(releases.plan('14.3.1', '14.3.2', 'minor'), '14.4.0')
@@ -159,6 +183,13 @@ class DesktopReleaseTests(unittest.TestCase):
         self.assertEqual(stable['on']['workflow_dispatch']['inputs']['publish']['default'], 'true')
         promotion = next(s for s in stable['jobs']['release']['steps'] if 'desktop_releases.py promote' in s.get('run', ''))
         self.assertEqual(promotion['if'], 'inputs.publish')
+        self.assertEqual(promotion['env']['STAGED_RELEASE_ID'], '${{ steps.create_release.outputs.id }}')
+        self.assertIn('--release-id "$STAGED_RELEASE_ID"', promotion['run'])
+        nightly_promotion = next(s for s in workflows[1]['jobs']['release']['steps'] if 'desktop_releases.py" promote' in s.get('run', ''))
+        self.assertIn('--release-id "$STAGED_RELEASE_ID"', nightly_promotion['run'])
+        recovery = yaml.load((root / '.github/workflows/publish-desktop-draft.yml').read_text(), Loader=yaml.BaseLoader)
+        self.assertEqual(set(recovery['on']), {'workflow_dispatch'})
+        self.assertEqual(recovery['concurrency'], stable['concurrency'])
 
 
 if __name__ == '__main__':

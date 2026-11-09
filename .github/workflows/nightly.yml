@@ -430,9 +430,10 @@ jobs:
           STAGED_TAG: ${{ needs.version.outputs.tag }}
           RELEASE_VERSION: ${{ needs.version.outputs.version }}
           RELEASE_SHA: ${{ needs.version.outputs.sha }}
+          STAGED_RELEASE_ID: ${{ steps.create_release.outputs.id }}
         run: |
           git show "$GITHUB_SHA:scripts/desktop_releases.py" > "$RUNNER_TEMP/desktop_releases.py"
-          python3 "$RUNNER_TEMP/desktop_releases.py" promote --channel nightly --tag "$STAGED_TAG" --version "$RELEASE_VERSION" --sha "$RELEASE_SHA"
+          python3 "$RUNNER_TEMP/desktop_releases.py" promote --release-id "$STAGED_RELEASE_ID" --channel nightly --tag "$STAGED_TAG" --version "$RELEASE_VERSION" --sha "$RELEASE_SHA"
 
       - name: Discord Notification (Build Complete)
         shell: bash
