@@ -8,7 +8,7 @@ const { fixture, audio, headers, hash, token } = require('./support/phone-upload
 const childPath = path.join(__dirname,'support/phone-upload-crash.cjs')
 for (const edge of ['afterFileSync','afterPrepared','beforeCommit','afterCommit','afterPublicLink','beforePublicationCommit','afterPublicationCommit']) {
   test(`actual process exit at ${edge} recovers one original and its stable outcome`,async()=>{
-    const root=await fs.mkdtemp(path.join(os.tmpdir(),'upload-crash-')), bytes=audio()
+    const root=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'upload-crash-'))), bytes=audio()
     const child=fork(childPath,[root,edge],{stdio:['ignore','ignore','pipe','ipc']})
     let diagnostic='';child.stderr.on('data',data=>diagnostic+=data)
     const dead=new Promise(resolve=>child.once('exit',resolve))
@@ -62,7 +62,7 @@ test('lost HTTP reply after preparation cannot lead to a second committed origin
 })
 
 test('a new real process generation fences an older receiver still alive before COMMIT',async()=>{
-  const root=await fs.mkdtemp(path.join(os.tmpdir(),'upload-fence-')),bytes=audio()
+  const root=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'upload-fence-'))),bytes=audio()
   const child=fork(childPath,[root,'hold:afterPrepared'],{stdio:['ignore','ignore','pipe','ipc']})
   const dead=new Promise(resolve=>child.once('exit',resolve))
   let f

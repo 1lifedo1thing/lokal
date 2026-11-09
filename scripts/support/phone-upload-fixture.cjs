@@ -44,6 +44,7 @@ function headers(bytes, extra = {}) {
 }
 async function fixture({ root, boundary, owner, destination, validateDestination } = {}) {
   root ??= await fs.mkdtemp(path.join(os.tmpdir(),'desktop-upload-'))
+  root = await fs.realpath(root)
   const db = database(path.join(root,'desktop.sqlite'))
   const store = new LinkStore(db)
   const tokenHash = createHash('sha256').update(token).digest('hex')
