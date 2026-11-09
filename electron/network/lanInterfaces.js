@@ -23,6 +23,9 @@ function lanInterfaces(interfaces = os.networkInterfaces()) {
       if (!entry || entry.internal || !['IPv4', 4].includes(entry.family) || !isIPv4(address || '')) continue
       const first = Number(address.split('.')[0])
       if (first === 0 || first === 127 || first >= 224 || address.startsWith('169.254.')) continue
+      // Renamed TUN adapters may look like Ethernet. Host-only /32 addresses
+      // and the 198.18/15 benchmark range are not ordinary LAN endpoints.
+      if (entry.netmask === '255.255.255.255' || /^198\.(?:18|19)\./.test(address)) continue
       candidates.push({ ...entry, name, address })
     }
   }

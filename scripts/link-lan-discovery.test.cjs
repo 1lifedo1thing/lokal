@@ -30,6 +30,8 @@ test('Wi-Fi and Ethernet outrank unknown interfaces; bad, duplicate and virtual 
   const values = lanInterfaces({
     unknown: [ipv4('192.168.1.20'), ipv4('10.1.1.2'), ipv4('100.120.1.2')],
     'Wi-Fi': [ipv4('192.168.1.20')],
+    'Ethernet 2': [{ ...ipv4('10.8.0.2'), netmask: '255.255.255.255' }],
+    'Ethernet 3': [ipv4('198.18.0.1')],
     en0: [{ ...ipv4('192.168.2.20'), family: 4 }],
     utun3: [ipv4('10.3.1.1')],
     wg0: [ipv4('10.4.1.1')],
