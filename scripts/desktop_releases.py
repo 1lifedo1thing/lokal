@@ -135,7 +135,7 @@ def promote(github, staged, channel, version, sha):
     old_sha = identity(old)[1] if old else None
     # Keep the old release/assets recoverable until the replacement publishes.
     if old:
-        backup = 'v' + identity(old)[0]
+        backup = f'v{identity(old)[0]}-retired.{old["id"]}'
         github.move_tag(backup, old_sha)
         github.api(f'releases/{old["id"]}', 'PATCH', {'tag_name': backup})
     try:
@@ -192,7 +192,9 @@ def main():
     else:
         release = github.api(f'releases/tags/{args.tag}')
         version = args.version or args.tag.removeprefix('v')
-        sha = args.sha or git('rev-parse', f'refs/tags/{args.tag}^{{commit}}')
+        target = release.get('target_commitish', '')
+        sha = args.sha or (target if re.fullmatch(r'[0-9a-f]{40}', target) else
+                           git('rev-parse', f'refs/tags/{args.tag}^{{commit}}'))
         if args.dry_run:
             verify(release, version)
             print(json.dumps({'release': release['id'], 'channel': args.channel, 'version': version, 'sha': sha}))

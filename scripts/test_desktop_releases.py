@@ -44,6 +44,9 @@ class FakeGitHub:
         if method == 'PATCH':
             if self.fail_publication and data.get('draft') is False:
                 raise RuntimeError('Publication failed')
+            if 'tag_name' in data and any(item['id'] != release_id and item['tag_name'] == data['tag_name']
+                                          for item in self.items.values()):
+                raise ValueError('Another release already uses that tag')
             self.items[release_id].update(data)
         elif method == 'DELETE':
             del self.items[release_id]
@@ -102,6 +105,15 @@ class DesktopReleaseTests(unittest.TestCase):
         self.assertTrue(github.items[2]['prerelease'])
         self.assertEqual(github.items[2]['make_latest'], 'false')
         self.assertEqual(github.items[1]['tag_name'], 'desktop')
+
+    def test_rebuilding_same_nightly_version_does_not_collide_with_staging_tag(self):
+        version = '14.3.2-nightly.4'
+        old = package(2, version, 'nightly')
+        staged = package(3, version, draft=True)
+        github = FakeGitHub(package(1, '14.3.1', 'desktop'), old, staged)
+        releases.promote(github, staged, 'nightly', version, NEW_SHA)
+        self.assertEqual(github.items[3]['tag_name'], 'nightly')
+        self.assertNotEqual(github.items[2]['tag_name'], staged['tag_name'])
 
     def test_cleanup_preserves_channels_and_review_drafts(self):
         github = FakeGitHub(package(1, '14.3.1', 'desktop'), package(2, '14.3.0'),
