@@ -566,7 +566,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ needs.prepare.outputs.sha }}
-        run: python3 scripts/desktop_releases.py promote --tag "$TAG" --version "$RELEASE_VERSION" --sha "$RELEASE_SHA"
+          STAGED_RELEASE_ID: ${{ steps.create_release.outputs.id }}
+        run: python3 scripts/desktop_releases.py promote --release-id "$STAGED_RELEASE_ID" --tag "$TAG" --version "$RELEASE_VERSION" --sha "$RELEASE_SHA"
 
       - name: Discord Notification (Build Complete)
         continue-on-error: true
