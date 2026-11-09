@@ -6,11 +6,15 @@ The desktop panel can control connected phone playback or transfer playback in e
 
 Pairing and synchronization are separate: the phone previews the merge before enabling it. History merges by event ID. Library mutations use append-only operation IDs, hybrid logical clocks, per-field conflict resolution, explicit playlist tombstones, stable playlist UUIDs, and numeric positions with deterministic track-key ordering. Missing rows never imply deletion. Imported listening events do not invoke external scrobblers. Sync cursors are scoped to desktop and user profile. Theme adoption requires an explicit setting on the receiving device.
 
-The LAN protocol uses `_lokal._tcp.local` discovery, sharing the multicast socket with Cast. Pairing is POST `/api/remote/pair`; playback and journal exchange use `/api/remote/ws`. Messages have `{v:1,type,id,ts,body}`. Request IDs correlate replies. State messages carry semantic changes and seeks; clients extrapolate position from `positionAt`. Sockets use heartbeat and Android reconnect/backoff; manual address and legacy polling remain available.
+The LAN protocol uses `_lokal._tcp.local` discovery, sharing multicast sockets with Cast. Pairing is POST `/api/remote/pair`; playback and journal exchange use `/api/remote/ws`. Messages have `{v:1,type,id,ts,body}`. Request IDs correlate replies. State messages carry semantic changes and seeks; clients extrapolate position from `positionAt`. Sockets use heartbeat and Android reconnect/backoff; manual address and legacy polling remain available.
+
+Pairing URLs, QR codes and discovery use the same LAN interface selection. Node reports active interfaces; Ethernet/Wi-Fi addresses are preferred, while recognizable Wintun, VPN, Tailscale and host-only VM/container adapters are omitted from automatic discovery. Loopback, link-local and invalid IPv4 addresses are excluded. Carrier-shared addresses are omitted when an ordinary LAN address exists, but can support a genuine carrier-shared LAN when alone. An explicitly named Hyper-V external switch is allowed because it can carry the physical LAN connection. Manual connections are unchanged.
+
+Each eligible interface has an explicit multicast route and advertises only its own local IPv4 address. This prevents a phone on Wi-Fi from resolving an unrelated Ethernet/VPN address. Interface changes are reconciled every five seconds and before outgoing discovery packets. With no eligible LAN, no automatic address or default-route multicast socket is offered.
 
 Device bearer tokens are random, hashed in desktop SQLite and kept in Android secure storage. They authorize the remote/media surface, not the general settings/filesystem API. Audio copies go through the bounded, checksummed `/api/remote/files` endpoint and promote matching placeholders in place. QR images are generated locally. The transport is intended for a trusted LAN; it does not add TLS to the existing HTTP server.
 
-The implementation has not been built or exercised on physical devices. CI, tests and builds were skipped at the user's request.
+The interface policy has automated pairing/discovery and Cast regression coverage (`node --test scripts/link-lan-discovery.test.cjs scripts/cast-discovery.test.mjs`). Explicit interface binding has also been checked with real multicast query/response on loopback. Physical Windows/VPN and phone network validation remains separate.
 
 ## Phone → PC file names
 

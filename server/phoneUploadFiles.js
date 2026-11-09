@@ -102,7 +102,9 @@ class PhoneUploadFiles {
   }
   syncCandidate(relative, expected) {
     const target = this.candidate(relative)
-    const fd = fs.openSync(target, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW)
+    // Windows FlushFileBuffers requires write access. Reopen our verified
+    // private candidate read/write without truncation; fsync remains mandatory.
+    const fd = fs.openSync(target, fs.constants.O_RDWR | fs.constants.O_NOFOLLOW)
     try {
       if (!same(witness(fs.fstatSync(fd, { bigint: true })), expected)) throw failure(409, 'file_changed')
       fs.fsyncSync(fd)
