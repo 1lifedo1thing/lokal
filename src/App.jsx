@@ -61,7 +61,7 @@ import { usePlayerStore, useAppStore } from './store/player'
 import { useShallow } from 'zustand/react/shallow'
 import { api, peekSettings } from './api'
 import { collectLocalPrefs } from './localPrefsBackup'
-import { isStationTrack, stationSongTime, RADIO_CONTEXT } from './radio/stations'
+import { isStationTrack, stationSongTime } from './radio/stations'
 import { pauseRadio, playRadio, radioTrackId, releaseRadio, startRadio } from './radio/radioSession'
 import { handleStationTitle, resetStationDisplay } from './radio/radioNowPlaying'
 import { radioBufferSeconds, useRadioStore } from './store/radio'
@@ -94,6 +94,7 @@ import { isWindowHidden, onWindowVisibility } from './windowVisibility'
 import { startSpotifyLikesSync } from './spotifyLikes'
 import { continueFlow, flowNeedsMore } from './flow/session'
 import { buildRadio } from './radioActions'
+import { autoplayEnabled, shouldTopUpRelated } from './queueAutoplay'
 import { playbackSpeed, usePlaybackSpeed } from './playbackSpeed.mjs'
 import { useCastPlayback, takeResumePosition } from './cast/useCastPlayback'
 import { readSavedRoute, writeSavedRoute, readViewState, writeViewState, statePersistenceEnabled } from './statePersistence.mjs'
@@ -2365,16 +2366,15 @@ export default function App() {
       if (flowNeedsMore(state)) continueFlow().catch(() => {})
       return
     }
-    const { queue, queueIndex, _fetchingRelated } = state
-    if (['discovery', 'mix', 'library-folder', RADIO_CONTEXT].includes(state.playbackContext?.type) || isStationTrack(currentTrackRef.current) || queue.length - queueIndex - 1 >= 3 || !currentTrackRef.current || _fetchingRelated) return
+    if (!shouldTopUpRelated(state)) return
     const generation = state.playbackGeneration
     const queueRevision = state.queueResetRevision || 0
-    const seed = currentTrackRef.current
+    const seed = state.currentTrack
     const userId = userRef.current?.id
     const context = state.playbackContext
     const current = () => {
       const now = usePlayerStore.getState()
-      return now.playbackGeneration === generation && now.playbackContext === context &&
+      return autoplayEnabled() && now.repeat === 'none' && now.playbackGeneration === generation && now.playbackContext === context &&
         (now.queueResetRevision || 0) === queueRevision && now.currentTrack?.id === seed.id
     }
     state.setFetchingRelated(true)
@@ -3264,7 +3264,6 @@ export default function App() {
             enabled: state.crossfade?.gapless !== false,
             current, next: nextTrack, remaining,
             playing: state.isPlaying, repeat: state.repeat,
-            autoplay: localStorage.getItem('lokal-autoplay') !== '0',
             localCurrent: !!current.file_path && !streamRef(current) && !!audioSrcFor(current),
             localNext: !!nextTrack.file_path && !streamRef(nextTrack) && !!audioSrcFor(nextTrack),
             castActive: state.castActive,
@@ -3295,7 +3294,6 @@ export default function App() {
         mode: 'off', current, next: nextTrack, remaining,
         enabled: state.crossfade?.gapless !== false,
         playing: state.isPlaying, repeat: state.repeat,
-        autoplay: localStorage.getItem('lokal-autoplay') !== '0',
         localCurrent: !!current?.file_path && !streamRef(current) && !!audioSrcFor(current),
         localNext: !!nextTrack?.file_path && !streamRef(nextTrack) && !!audioSrcFor(nextTrack),
         castActive: state.castActive,
