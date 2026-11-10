@@ -6,6 +6,29 @@ import { libraryDownloadMessage, saveTracksToLibrary } from './onlineTracks.js'
 import { playRecommendationPool } from './recommendationPlayback.js'
 import { playbackFallbackMessage, resolveRecommendationTracks } from './recommendations.js'
 import { showLoadingToast, showToast } from './components/Toaster.jsx'
+import { queueOnlineTracks } from './onlineQueue.js'
+
+/** Explicit queue actions resolve every selected row without starting audio. */
+export async function queueOnline(tracks, { next = false, isCurrent = () => true } = {}) {
+  const toast = showLoadingToast('Finding the selected songs…')
+  try {
+    const rows = await queueOnlineTracks(tracks, {
+      next, isCurrent,
+      onProgress: message => { if (isCurrent()) toast.update(message) },
+      onProviderFailure: failure => { if (isCurrent()) toast.update(playbackFallbackMessage(failure)) },
+    })
+    toast.close(!rows.length && isCurrent() ? 'No playable matches were found.' : '')
+    if (rows.length) {
+      const unavailable = tracks.length - rows.length
+      const message = next ? `${rows.length} songs will play next` : `Added ${rows.length} songs to queue`
+      showToast(message + (unavailable > 0 ? `; ${unavailable} unavailable` : ''))
+    }
+    return rows
+  } catch {
+    toast.close(isCurrent() ? 'Could not resolve the selected tracks.' : '')
+    return []
+  }
+}
 
 /** Play `tracks` from `selected` (or the first), finding each in the playback sources. */
 export async function playOnline(tracks, { selected, name, path, isCurrent = () => true } = {}) {

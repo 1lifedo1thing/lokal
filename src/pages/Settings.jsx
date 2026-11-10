@@ -1702,7 +1702,7 @@ activeCategory === 'data' ? usersTried
 
       {inCategory('playback') && (
       <Section title={t("Playback")}>
-        <Row label={t("Autoplay")} desc={t("Play the next song automatically. Turn off to stop when the current song ends.")}>
+        <Row label={t("Autoplay")} desc={t("When the queue ends, keep playing similar songs. Queued songs always play in order.")}>
           <button type="button" aria-pressed={autoplayEnabled} onClick={() => {
             const enabled = !autoplayEnabled
             setAutoplayEnabled(enabled)
