@@ -84,8 +84,8 @@ function manager() {
     getDB,
     getStorageDir,
     findTools: () => ({ ytdlp: findYtDlp(), ffmpeg: findFfmpeg(), ffprobe: findFfprobe() }),
-    // A fresh link for an addon download, right before it starts.
-    resolveAddonUrl: async (provider, id) => (await require('../online/sources').resolveStream(provider, id, { db: getDB(), force: true, download: true })).url,
+    // Keep URL and staged-file results in main, resolving with download intent.
+    resolveAddonStream: (provider, id) => require('../online/sources').resolveStream(provider, id, { db: getDB(), force: true, download: true }),
     verifyAddonAccess: key => require('../mornye/api').dispatch(getDB(), { action: 'package.verifyAndWait', key }),
     requireFfmpeg: true,
     index: async (filepath, opts) => {
