@@ -1363,7 +1363,7 @@ class DownloadManager {
         // its metadata was already set during the copy/remux and verified.
         const done = job.opts.explicitAtmosDownload
           ? { filePath: filepath, lyrics: null, cover: false }
-          : await finishFile(filepath, { db: this.db(), settings, url: job.url, meta, kind: job.kind, outputDir, known: job.opts?.tags || null })
+          : await finishFile(filepath, { db: this.db(), settings, url: job.url, meta, kind: job.kind, outputDir, known: job.opts?.tags || null, recoverArtwork: !!job.opts?.addonSource })
         finalPath = done.filePath
         // Explicit output paths and lossless replacements keep their own destinations.
         const downloadFolder = String(job.settings?.download_folder || '').trim()
