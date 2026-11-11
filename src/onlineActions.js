@@ -65,10 +65,16 @@ export async function resolveOnline(tracks, { label, isCurrent = () => true } = 
 }
 
 /** Download `tracks` to the library, from the best playback source for each. */
-export async function downloadOnline(tracks, { label, isCurrent = () => true } = {}) {
-  const rows = await resolveOnline(tracks, { label, isCurrent })
+export async function downloadOnline(tracks, { label, isCurrent = () => true, addonQuality } = {}) {
+  // A selected add-on tier belongs to that exact provider/recording.
+  // Do not search through another provider and accidentally apply its tier.
+  const candidates = addonQuality
+    ? tracks.map(track => /^a-/.test(String(track?.provider || '')) && track?.id != null
+      ? { ...track, exact: true } : track)
+    : tracks
+  const rows = await resolveOnline(candidates, { label, isCurrent })
   if (!rows.length) return
-  const result = await saveTracksToLibrary(rows, { isCurrent })
+  const result = await saveTracksToLibrary(rows, { isCurrent, addonQuality })
   result.failed += tracks.length - rows.length
   showToast(libraryDownloadMessage(result))
 }

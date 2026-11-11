@@ -540,10 +540,11 @@ class DownloadManager {
     // Merge all playlist requests even when they use exactly the same URL.
     // Addon identities take precedence: a shared endpoint can serve different songs.
     const ref = jobSourceRef(kind, url, opts)
-    const atmosIntent = packageSource && opts.explicitAtmosDownload === true && opts.addonQuality === 'DOLBY_ATMOS'
     const running = [...this.jobs.values()].find(j => ACTIVE.has(j.status) && !j.stop &&
       (ref ? j.sourceRef === ref : j.url === url && j.kind === kind) &&
-      (!packageSource || (j.opts?.explicitAtmosDownload === true) === atmosIntent))
+      // Distinct explicitly requested renditions must not collapse into
+      // one download job with the first song's quality.
+      (!packageSource || (j.opts?.addonQuality || '') === (opts.addonQuality || '')))
     if (running) {
       if (opts.replaceTrackId && opts.replaceTrackId !== running.opts.replaceTrackId) {
         if (!running.opts.replaceTrackId) running.opts.replaceTrackId = opts.replaceTrackId
@@ -1072,7 +1073,9 @@ class DownloadManager {
       const { provider, id } = job.opts.addonSource
       return this.downloadPackageWithVerification(provider.slice(2), id, {
         signal: controller.signal, quality: job.opts.addonQuality,
-        allowAtmos: job.opts.explicitAtmosDownload === true && job.opts.addonQuality === 'DOLBY_ATMOS',
+        // A direct manifest quality choice authorizes that *one* encoded
+        // save, not native Atmos playback or changing default preferences.
+        allowAtmos: !!job.opts.addonQuality,
         onProgress: update => { if (job.packageAbort === controller && !job.stop) this.update(job, { progress: update.percent ?? job.progress, message: update.message || 'Downloading addon audio…' }) },
       }, {
         onVerificationRequired: () => this.update(job, { message: 'Waiting for addon verification…' }),
