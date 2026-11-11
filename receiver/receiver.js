@@ -29,6 +29,9 @@
   var audio = $('audio')
   var video = $('video')
   var all = function (selector) { return Array.prototype.slice.call(document.querySelectorAll(selector)) }
+  // Older senders can prepare the next recording before CAF changes tracks.
+  // Keep a small window without ever painting another recording's content.
+  var presentations = new Map()
 
   var state = {
     senderProtocol: 1, // the version of Lokal's messages (PROTOCOL), from the last one
@@ -116,6 +119,9 @@
       paintBackdrop(track.image)
       if (state.lyrics && state.lyrics.trackId !== track.id) setLyrics(null)
       if (state.video && state.video.trackId !== track.id) setVideo(null)
+      var prepared = presentations.get(track.id)
+      if (prepared && prepared.lyrics) setLyrics(prepared.lyrics)
+      if (prepared && prepared.video) setVideo(prepared.video)
       renderUpNext()
       showVideoInfo()
       // A new song: the screen first, then a look at what's next.
@@ -225,6 +231,7 @@
     lines.appendChild(nodes)
     lines.classList.toggle('plain', !!state.lyrics && !state.lyrics.synced)
     box.classList.toggle('empty', !!state.lyrics && list.length === 0)
+    if (state.want === 'lyrics') $('view-status').textContent = ''
     if (view() === 'lyrics') tick(true)
   }
 
@@ -333,12 +340,12 @@
   }
 
   video.addEventListener('loadeddata', function () {
-    if (!state.video) return
+    if (!state.video || !state.video.url) return
     state.video.ready = true
     applyView()
     loop()
   })
-  video.addEventListener('error', function () { if (state.video) { state.video = null; applyView() } })
+  video.addEventListener('error', function () { if (state.video && state.video.url) { state.video = null; $('view-status').textContent = 'Video unavailable'; applyView() } })
 
   function syncVideo(t) {
     var v = state.video
@@ -429,14 +436,27 @@
   var PROTOCOL = 1
 
   function onMessage(data) {
-    if (!data || typeof data !== 'object') return
+    // Native senders and raw Cast V2 clients can deliver either JSON form.
+    if (typeof data === 'string') { try { data = JSON.parse(data) } catch (_) { return } }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return
     state.senderProtocol = Number(data.protocol) || 1
+    if ((data.type === 'lyrics' || data.type === 'video') && data.trackId != null) {
+      data = Object.assign({}, data, { trackId: String(data.trackId) })
+      var prepared = presentations.get(data.trackId) || {}
+      prepared[data.type] = data
+      presentations.delete(data.trackId)
+      presentations.set(data.trackId, prepared)
+      while (presentations.size > 4) presentations.delete(presentations.keys().next().value)
+      if (!state.track || data.trackId !== state.track.id) return
+    }
     if (data.type === 'upnext') setUpNext(data.items)
     else if (data.type === 'lyrics') setLyrics(data)
     else if (data.type === 'video') setVideo(data.url || data.videoId ? data : null)
     else if (data.type === 'view') {
       if (data.view) state.want = data.view === 'lyrics' || data.view === 'video' ? data.view : 'nowplaying'
       if (/^#[0-9a-f]{3,8}$/i.test(String(data.accent || ''))) document.documentElement.style.setProperty('--accent', data.accent)
+      $('view-status').textContent = state.want === 'video' && (!state.video || !state.video.ready) ? 'Loading video…'
+        : state.want === 'lyrics' && (!state.lyrics || !state.track || state.lyrics.trackId !== state.track.id) ? 'Loading lyrics…' : ''
       applyView()
     }
   }
