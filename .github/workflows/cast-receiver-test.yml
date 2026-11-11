@@ -25,7 +25,11 @@ jobs:
       - name: Install isolated browser test dependency
         run: |
           npm install --prefix "$RUNNER_TEMP/cast-browser" --no-package-lock --ignore-scripts playwright@1.62.1
-          "$RUNNER_TEMP/cast-browser/node_modules/.bin/playwright" install --with-deps chromium
+          # The hosted Ubuntu image already provides Chrome and its libraries.
+          # Avoid a second apt/browser installation (and unrelated mirror outages).
+          chrome_path="$(command -v google-chrome)"
+          test -x "$chrome_path"
+          echo "CHROMIUM_PATH=$chrome_path" >> "$GITHUB_ENV"
       - name: Test protocol, media, queue, and audible receiver output
         env:
           NODE_PATH: ${{ runner.temp }}/cast-browser/node_modules
