@@ -48,6 +48,7 @@ for (const preferred of ['lyrics', 'video']) test(`receiver ${preferred} survive
    castVideo:async data=>{window.nativeCalls.push({data:{type:'video',...data},accepted:window.receiverReady});return {found:true}},
    getLyrics:async()=>{
     window.lyricsLookups=(window.lyricsLookups||0)+1;
+    if(window.lyricsLookups>1)return null;
     if(!window.lyricsReleased)await new Promise(resolve=>{window.releaseLyrics=()=>{window.lyricsReleased=true;resolve()}});
     return {type:'synced',lines:[{time:0,text:'Actual lyric'}]};
    },
@@ -75,5 +76,9 @@ for (const preferred of ['lyrics', 'video']) test(`receiver ${preferred} survive
  const before=await page.evaluate(()=>nativeCalls.length);
  await page.getByRole('button',{name:preferred,exact:true}).click();
  await page.waitForFunction(({view,before})=>nativeCalls.slice(before).some(c=>c.accepted && c.data.type===view && c.data.trackId==='pc-track'),{view:preferred,before});
+ if(preferred==='lyrics') {
+  assert.equal(await page.evaluate(()=>lyricsLookups),1);
+  assert.equal(await page.evaluate(()=>nativeCalls.filter(c=>c.accepted && c.data.type==='lyrics').at(-1).data.lines[0].text),'Actual lyric');
+ }
  assert.deepEqual(errors,[]);
 });

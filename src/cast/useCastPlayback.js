@@ -130,19 +130,23 @@ export function useCastPlayback(helpers) {
       live.lyricsFor = String(track.id)
       const session = live
       // LOAD completion and view selection may both request a resend. Share
-      // the lookup so a second provider failure cannot erase its first result.
+      // and retain successful content for this recording; empty lookups retry.
       let request = session.lyricsRequest
       if (!request || request.id !== String(track.id)) {
         request = { id: String(track.id) }
         request.work = Promise.resolve(api.getLyrics(track.id, track.title, track.artist, track.album, track.duration, track.file_path))
           .catch(() => null)
-          .finally(() => { if (session.lyricsRequest === request) session.lyricsRequest = null })
+          .then(receiverLyrics)
+          .then(content => {
+            if (!content.lines.length && session.lyricsRequest === request) session.lyricsRequest = null
+            return content
+          })
         session.lyricsRequest = request
       }
       request.work
-        .then(result => {
+        .then(content => {
           if (live !== session || String(player().currentTrack?.id) !== String(track.id)) return
-          api.castCustom({ type: 'lyrics', trackId: String(track.id), ...receiverLyrics(result) }).catch(() => {})
+          api.castCustom({ type: 'lyrics', trackId: String(track.id), ...content }).catch(() => {})
         })
     }
 
