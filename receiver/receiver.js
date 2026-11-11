@@ -29,6 +29,9 @@
   var audio = $('audio')
   var video = $('video')
   var all = function (selector) { return Array.prototype.slice.call(document.querySelectorAll(selector)) }
+  // Older senders can prepare the next recording before CAF changes tracks.
+  // Keep a small window without ever painting another recording's content.
+  var presentations = new Map()
 
   var state = {
     senderProtocol: 1, // the version of Lokal's messages (PROTOCOL), from the last one
@@ -116,6 +119,9 @@
       paintBackdrop(track.image)
       if (state.lyrics && state.lyrics.trackId !== track.id) setLyrics(null)
       if (state.video && state.video.trackId !== track.id) setVideo(null)
+      var prepared = presentations.get(track.id)
+      if (prepared && prepared.lyrics) setLyrics(prepared.lyrics)
+      if (prepared && prepared.video) setVideo(prepared.video)
       renderUpNext()
       showVideoInfo()
       // A new song: the screen first, then a look at what's next.
@@ -434,7 +440,15 @@
     if (typeof data === 'string') { try { data = JSON.parse(data) } catch (_) { return } }
     if (!data || typeof data !== 'object' || Array.isArray(data)) return
     state.senderProtocol = Number(data.protocol) || 1
-    if ((data.type === 'lyrics' || data.type === 'video') && state.track && data.trackId != null && String(data.trackId) !== state.track.id) return
+    if ((data.type === 'lyrics' || data.type === 'video') && data.trackId != null) {
+      data = Object.assign({}, data, { trackId: String(data.trackId) })
+      var prepared = presentations.get(data.trackId) || {}
+      prepared[data.type] = data
+      presentations.delete(data.trackId)
+      presentations.set(data.trackId, prepared)
+      while (presentations.size > 4) presentations.delete(presentations.keys().next().value)
+      if (!state.track || data.trackId !== state.track.id) return
+    }
     if (data.type === 'upnext') setUpNext(data.items)
     else if (data.type === 'lyrics') setLyrics(data)
     else if (data.type === 'video') setVideo(data.url || data.videoId ? data : null)

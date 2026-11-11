@@ -46,7 +46,11 @@ for (const preferred of ['lyrics', 'video']) test(`receiver ${preferred} survive
    castCustom:async data=>{window.nativeCalls.push({data,accepted:window.receiverReady});return window.receiverReady},
    castUpNext:async()=>true,
    castVideo:async data=>{window.nativeCalls.push({data:{type:'video',...data},accepted:window.receiverReady});return {found:true}},
-   getLyrics:async()=>({type:'synced',lines:[{time:0,text:'Actual lyric'}]}),
+   getLyrics:async()=>{
+    window.lyricsLookups=(window.lyricsLookups||0)+1;
+    if(!window.lyricsReleased)await new Promise(resolve=>{window.releaseLyrics=()=>{window.lyricsReleased=true;resolve()}});
+    return {type:'synced',lines:[{time:0,text:'Actual lyric'}]};
+   },
    musicVideo:async()=>({videoId:'abcdefghijk'}),
    onCastDevices:noop,onCastStatus:noop,onCastEnded:noop,onCastFinished:noop,onCastTrackError:noop,onCastCustom:noop,
   };
@@ -60,6 +64,10 @@ for (const preferred of ['lyrics', 'video']) test(`receiver ${preferred} survive
  await page.waitForFunction(()=>window.completeLoad);
  await page.evaluate(()=>completeLoad());
  await page.waitForFunction(view=>nativeCalls.some(c=>c.accepted && c.data.type==='view' && c.data.view===view),preferred);
+ // The pre-load lookup is still pending. A resend shares that work instead
+ // of racing a second provider request against the successful first result.
+ assert.equal(await page.evaluate(()=>lyricsLookups),1);
+ await page.evaluate(()=>releaseLyrics());
  await page.waitForFunction(view=>nativeCalls.some(c=>c.accepted && c.data.type===view && c.data.trackId==='pc-track'),preferred);
  // Switching away and back must resend the chosen content, even if its first
  // send was dropped while the native receiver was loading.

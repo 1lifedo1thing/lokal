@@ -9,7 +9,7 @@ const caf = `(() => {
  const callbacks = [], audio = () => window.castAudio;
  const player = {
    setMediaElement() {}, addEventListener(types, callback) { callbacks.push({types: Array.isArray(types) ? types : [types], callback}) },
-   getMediaInformation: () => ({ metadata: { title:'Receiver regression',artist:'Lokal',images:[{url:'/cover.svg'}] }, customData:{trackId:'track-1'},duration:30 }),
+   getMediaInformation: () => ({ metadata: { title:'Receiver regression',artist:'Lokal',images:[{url:'/cover.svg'}] }, customData:{trackId:window.receiverTrack||'track-1'},duration:30 }),
    getPlayerState: () => audio()?.ended ? 'IDLE' : audio()?.paused ? 'PAUSED' : 'PLAYING',
    getDurationSec: () => audio()?.duration || 30,
  };
@@ -100,6 +100,19 @@ test(failScriptOnce ? 'receiver retries video loading after a transient API fail
  await page.getByRole('button',{name:'Cover',exact:true}).click();
  await page.waitForFunction(()=>videoPlayer.state===2);
  await page.waitForFunction(()=>document.body.dataset.view==='now');
+ // A released older sender sends B while CAF still reports A, with no
+ // post-load resend. Retain B, but keep A's lyrics/video until the load.
+ await page.evaluate(()=>{
+  window.previousVideo=videoPlayer;
+  receiverMessage({type:'lyrics',trackId:'track-2',synced:true,lines:[{t:0,text:'Next recording'}]});
+  receiverMessage({type:'video',trackId:'track-2',videoId:'zyxwvutsrqp'});
+ });
+ assert.equal(await page.locator('#lines .line').first().textContent(),'First lyric');
+ assert.equal(await page.evaluate(()=>previousVideo===videoPlayer),true);
+ await page.evaluate(()=>{window.receiverTrack='track-2';castAudio.dispatchEvent(new Event('loadedmetadata'));receiverMessage({type:'view',view:'lyrics'})});
+ await page.waitForFunction(()=>document.getElementById('lines').textContent==='Next recording');
+ await page.evaluate(()=>receiverMessage({type:'view',view:'video'}));
+ await page.waitForFunction(()=>videoPlayer!==previousVideo && document.body.dataset.view==='video');
  assert.ok(await page.evaluate(()=>sent.some(message=>message.type==='view'&&message.view==='video')));
  assert.deepEqual(errors,[]);
 });
