@@ -6,6 +6,10 @@ on:
       - 'electron/link/**'
       - 'server/index.js'
       - 'scripts/link-persistence.test.mjs'
+      - 'scripts/link-device-names.test.mjs'
+      - 'src/components/LinkedDevicesPanel.jsx'
+      - 'electron/main.js'
+      - 'electron/preload.js'
       - 'electron/network/**'
       - 'electron/ipc/remote.js'
       - 'scripts/link-lan-discovery.test.cjs'
@@ -41,4 +45,4 @@ jobs:
       - name: Test mobile history attribution and artwork guards
         run: npm run test:mobile-history-artwork
       - name: Test durable pairing and authenticated address discovery
-        run: node --experimental-sqlite --test scripts/link-persistence.test.mjs
+        run: node --experimental-sqlite --test scripts/link-persistence.test.mjs scripts/link-device-names.test.mjs

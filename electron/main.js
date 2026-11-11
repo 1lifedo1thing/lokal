@@ -768,6 +768,7 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('remote:createPairing', () => require('./link').getLink()?.createPairing())
   ipcMain.handle('remote:listDevices', () => require('./link').getLink()?.devices() || [])
+  ipcMain.handle('remote:renameDevice', (_, {id,name}) => require('./link').getLink()?.renameDevice(String(id),name))
   ipcMain.handle('remote:revokeDevice', (_, id) => require('./link').getLink()?.revoke(String(id)))
   ipcMain.handle('remote:commandDevice', (_, {id,command}) => require('./link').getLink()?.commandDevice(String(id),command))
   ipcMain.handle('dialog:openFolder', async () => {

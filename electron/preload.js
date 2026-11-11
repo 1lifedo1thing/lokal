@@ -384,6 +384,7 @@ contextBridge.exposeInMainWorld('electron', {
   onRemoteCommand: (fn) => on('remote:command', (_, payload) => { Promise.resolve().then(() => fn(payload)).then(result => { if(payload?._requestId)ipcRenderer.send('remote:commandResult',payload._requestId,result || {ok:true}) }, () => { if(payload?._requestId)ipcRenderer.send('remote:commandResult',payload._requestId,{error:'The command could not be completed'}) }) }),
   createLinkPairing: () => invoke('remote:createPairing'),
   getLinkDevices: () => invoke('remote:listDevices'),
+  renameLinkDevice: (id, name) => invoke('remote:renameDevice',{id,name}),
   revokeLinkDevice: (id) => invoke('remote:revokeDevice',id),
   commandLinkDevice: (id, command) => invoke('remote:commandDevice',{id,command}),
   onSmtcShuffleRequest: (fn) => on('smtc:shuffleRequested', (_, value) => fn(value)),

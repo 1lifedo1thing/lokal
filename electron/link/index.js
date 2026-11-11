@@ -79,7 +79,9 @@ function createLink({ server, db, remote, enabled = () => true }) {
         if (!device.legacy) store.touch(device.id)
         const body=message.body
         switch (message.type) {
-          case 'hello': break
+          case 'hello':
+            if (!device.legacy) store.updateDeviceName(device.id, device.user_id, body.deviceName)
+            break
           case 'state': snapshots.set(device.id,{...body,updatedAt:Date.now()}); break
           case 'ack': {
             const request=pending.get(message.id)
@@ -157,6 +159,11 @@ function createLink({ server, db, remote, enabled = () => true }) {
     },
     pair(body,address) { const result=store.pair(body,address);closeDevice(body.deviceId,'paired again');return result },
     devices() { return store.devices(currentUser()).map(device=>({...device,connected:sockets.has(device.id),state:snapshots.get(device.id)||null})) },
+    renameDevice(id, name) {
+      const user = currentUser()
+      if (!store.renameDevice(id, user, name)) return {ok:false,error:'The device is unavailable.'}
+      return {ok:true,device:store.devices(user).find(device=>device.id===id)}
+    },
     revoke(id) { const result=store.revoke(id,currentUser());if(result)closeDevice(id);return {ok:result} },
     commandDevice(id,command) {
       const socket=sockets.get(id)
