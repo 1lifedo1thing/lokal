@@ -90,6 +90,8 @@ test(failScriptOnce ? 'receiver retries video loading after a transient API fail
  await page.waitForFunction(()=>window.videoPlayer?.state===1);
  assert.equal(youtubeRequests, failScriptOnce ? 2 : 1);
  await page.evaluate(()=>{window.currentVideo=videoPlayer;receiverMessage({type:'video',trackId:'retired-track',videoId:'another_vid'});});
+ await page.evaluate(()=>document.getElementById('video').dispatchEvent(new Event('error')));
+ assert.equal(await page.evaluate(()=>document.body.dataset.view),'video');
  assert.equal(await page.evaluate(()=>currentVideo===videoPlayer),true);
  assert.equal(await page.evaluate(()=>videoPlayer.muted),true);
  assert.equal(await page.evaluate(()=>castAudio.muted),false);

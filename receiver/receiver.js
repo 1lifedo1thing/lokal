@@ -334,12 +334,12 @@
   }
 
   video.addEventListener('loadeddata', function () {
-    if (!state.video) return
+    if (!state.video || !state.video.url) return
     state.video.ready = true
     applyView()
     loop()
   })
-  video.addEventListener('error', function () { if (state.video) { state.video = null; $('view-status').textContent = 'Video unavailable'; applyView() } })
+  video.addEventListener('error', function () { if (state.video && state.video.url) { state.video = null; $('view-status').textContent = 'Video unavailable'; applyView() } })
 
   function syncVideo(t) {
     var v = state.video
