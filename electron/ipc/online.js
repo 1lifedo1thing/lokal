@@ -145,6 +145,15 @@ function providers() {
         // Only the choice/transport hint reaches the renderer. No credentials,
         // tokens or unredacted settings are exposed.
         playbackQuality: selected?.id || null,
+        // Mornye's picker uses qualityOptions as its source of truth.
+        // Labels/descriptions are safe display fields; never expose tokens.
+        qualityOptions: a.kind === 'mornye'
+          ? (a.qualityOptions || []).filter(q => q && typeof q.id === 'string')
+            .slice(0, 30).map(q => ({
+              id: q.id, label: q.label || q.name || q.id,
+              description: q.description || '',
+            }))
+          : [],
         nativeSpatialPreferred: !!httpSpatial ||
           (spatial && /^(?:DOLBY[_ -]?ATMOS|ATMOS|AC-?4)$/i.test(String(selected.id))),
         nativeSpatialCodec: httpSpatial?.codec ||
