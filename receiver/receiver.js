@@ -267,10 +267,19 @@
     if (window.YT && window.YT.Player) return Promise.resolve()
     if (!youtubeLoading) youtubeLoading = new Promise(function (resolve, reject) {
       var previous = window.onYouTubeIframeAPIReady
-      window.onYouTubeIframeAPIReady = function () { if (previous) previous(); resolve() }
+      var ready = function () { clearTimeout(deadline); if (previous) previous(); resolve() }
+      window.onYouTubeIframeAPIReady = ready
       var script = document.createElement('script')
       script.src = 'https://www.youtube.com/iframe_api'
-      script.onerror = function () { reject(new Error('Video unavailable')) }
+      var fail = function () {
+        clearTimeout(deadline)
+        youtubeLoading = null
+        if (window.onYouTubeIframeAPIReady === ready) window.onYouTubeIframeAPIReady = previous
+        script.remove()
+        reject(new Error('Video unavailable'))
+      }
+      var deadline = setTimeout(fail, 20000)
+      script.onerror = fail
       document.head.appendChild(script)
     })
     return youtubeLoading
@@ -280,26 +289,26 @@
     $('youtube-video').textContent = ''
   }
   function setYoutube(info) {
-    if (state.video && state.video.videoId === info.videoId && state.video.trackId === String(info.trackId)) {
-      if (info.segments) state.video.segments = info.segments
+    if (state.video && state.video.videoId === info.videoId && state.video.trackId === String(info.trackId) && (state.video.ready || state.video.loading)) {
+      if (info.segments) state.video.segments = Array.isArray(info.segments) && info.segments.length ? info.segments : [{ start: 0, end: null, offset: 0 }]
       applyView(); loop(); return
     }
     body.setAttribute('data-video-kind', 'youtube')
     stopYoutube()
     video.pause(); video.removeAttribute('src'); video.load()
-    var current = state.video = { trackId: String(info.trackId), videoId: info.videoId, ready: false,
-      segments: info.segments || [{ start: 0, end: null, offset: 0 }] }
+    var current = state.video = { trackId: String(info.trackId), videoId: info.videoId, ready: false, loading: true,
+      segments: Array.isArray(info.segments) && info.segments.length ? info.segments : [{ start: 0, end: null, offset: 0 }] }
     youtubeAPI().then(function () {
       if (state.video !== current) return
       var mount = document.createElement('div'); $('youtube-video').appendChild(mount)
       youtube = new YT.Player(mount, { videoId: info.videoId,
         playerVars: { autoplay: 0, controls: 0, playsinline: 1, disablekb: 1, origin: location.origin },
         events: {
-          onReady: function (event) { if (state.video !== current) return; event.target.mute(); current.ready = true; $('view-status').textContent = ''; applyView(); loop() },
-          onError: function () { if (state.video !== current) return; current.ready = false; $('view-status').textContent = 'Video unavailable'; applyView() },
+          onReady: function (event) { if (state.video !== current) return; event.target.mute(); current.loading = false; current.ready = true; $('view-status').textContent = ''; applyView(); loop() },
+          onError: function () { if (state.video !== current) return; current.loading = false; current.ready = false; $('view-status').textContent = 'Video unavailable'; applyView() },
         },
       })
-    }).catch(function () { if (state.video === current) { current.ready = false; $('view-status').textContent = 'Video unavailable'; applyView() } })
+    }).catch(function () { if (state.video === current) { current.loading = false; current.ready = false; $('view-status').textContent = 'Video unavailable'; applyView() } })
   }
 
   function setVideo(info) {
@@ -343,7 +352,7 @@
       var active = state.playback === 'playing' && target != null && target >= 0 && view() === 'video'
       if (target != null && target >= 0 && Math.abs((youtube.getCurrentTime() || 0) - target) > 0.5) youtube.seekTo(target, true)
       if (active && youtube.getPlayerState() !== 1) youtube.playVideo()
-      else if (!active && youtube.getPlayerState() === 1) youtube.pauseVideo()
+      else if (!active && youtube.getPlayerState() !== 2) youtube.pauseVideo()
       return
     }
     var end = video.duration || 0

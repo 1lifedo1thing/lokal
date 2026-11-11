@@ -8,9 +8,9 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const caf = `(() => {
  const callbacks = [], audio = () => window.castAudio;
  const player = {
-   setMediaElement() {}, addEventListener(_, callback) { callbacks.push(callback) },
+   setMediaElement() {}, addEventListener(types, callback) { callbacks.push({types: Array.isArray(types) ? types : [types], callback}) },
    getMediaInformation: () => ({ metadata: { title:'Receiver regression',artist:'Lokal',images:[{url:'/cover.svg'}] }, customData:{trackId:'track-1'},duration:30 }),
-   getPlayerState: () => audio()?.paused ? 'PAUSED' : 'PLAYING',
+   getPlayerState: () => audio()?.ended ? 'IDLE' : audio()?.paused ? 'PAUSED' : 'PLAYING',
    getDurationSec: () => audio()?.duration || 30,
  };
  const context = {
@@ -22,13 +22,13 @@ const caf = `(() => {
      // visual video must never become the song's transport.
      window.castAudio = options.mediaElement || document.querySelector('.castMediaElement') || document.querySelector('audio,video');
      castAudio.src='/tone.wav';
-     for (const name of ['loadedmetadata','playing','pause','timeupdate']) castAudio.addEventListener(name, () => callbacks.forEach(fn => fn()));
+     for (const name of ['loadedmetadata','playing','pause','timeupdate','waiting','seeked','ended']) castAudio.addEventListener(name, () => callbacks.filter(entry => entry.types.includes(name)).forEach(entry => entry.callback()));
      castAudio.play();
    },
  };
  window.sent=[];
  window.cast={framework:{CastReceiverContext:{getInstance:()=>context},CastReceiverOptions:class {},
-   events:{EventType:{}},system:{EventType:{SENDER_CONNECTED:'connected'},MessageType:{JSON:'json'}},
+   events:{EventType:{PLAYER_LOAD_COMPLETE:'loadedmetadata',PLAYING:'playing',PAUSE:'pause',BUFFERING:'waiting',SEEKED:'seeked',MEDIA_STATUS:'timeupdate',ENDED:'ended',MEDIA_FINISHED:'mediafinished'}},system:{EventType:{SENDER_CONNECTED:'connected'},MessageType:{JSON:'json'}},
    messages:{Command:{ALL_BASIC_MEDIA:1,QUEUE_NEXT:2,QUEUE_PREV:4}},
  }};
 })();`
@@ -41,7 +41,8 @@ function tone() {
  return wav;
 }
 
-test('receiver binds audible audio, paints art, and switches lyrics/video without muting the recording', async t => {
+for (const failScriptOnce of [false, true]) {
+test(failScriptOnce ? 'receiver retries video loading after a transient API failure' : 'receiver binds audible audio, paints art, and switches lyrics/video without muting the recording', async t => {
  const server=createServer(async(req,res)=>{
    if(req.url==='/tone.wav'){res.writeHead(200,{'Content-Type':'audio/wav'});res.end(tone());return}
    if(req.url==='/cover.svg'){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end('<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500"><rect width="500" height="500" fill="#503981"/><circle cx="250" cy="250" r="140" fill="#f0bc85"/></svg>');return}
@@ -56,7 +57,8 @@ test('receiver binds audible audio, paints art, and switches lyrics/video withou
  t.after(()=>browser.close());const page=await browser.newPage({viewport:{width:1920,height:1080}});
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.route('https://www.gstatic.com/cast/sdk/**',route=>route.fulfill({body:caf,contentType:'text/javascript'}));
- await page.route('https://www.youtube.com/iframe_api',route=>route.fulfill({contentType:'text/javascript',body:`window.YT={Player:class {constructor(mount,options){this.time=0;this.state=2;this.muted=false;mount.appendChild(document.createElement('iframe'));window.videoPlayer=this;setTimeout(()=>options.events.onReady({target:this}),0)}mute(){this.muted=true}getCurrentTime(){return this.time}seekTo(t){this.time=t}getPlayerState(){return this.state}playVideo(){this.state=1}pauseVideo(){this.state=2}destroy(){}}};window.onYouTubeIframeAPIReady();`}));
+ let youtubeRequests = 0;
+ await page.route('https://www.youtube.com/iframe_api',route=>(++youtubeRequests === 1 && failScriptOnce) ? route.abort() : route.fulfill({contentType:'text/javascript',body:`window.YT={Player:class {constructor(mount,options){this.time=0;this.state=2;this.muted=false;mount.appendChild(document.createElement('iframe'));window.videoPlayer=this;setTimeout(()=>options.events.onReady({target:this}),0)}mute(){this.muted=true}getCurrentTime(){return this.time}seekTo(t){this.time=t}getPlayerState(){return this.state}playVideo(){this.state=1}pauseVideo(){this.state=2}destroy(){}}};window.onYouTubeIframeAPIReady();`}));
  await page.goto('http://127.0.0.1:'+server.address().port,{waitUntil:'domcontentloaded'});
  await page.waitForFunction(()=>window.castAudio?.currentTime>0.2);
  assert.equal(await page.evaluate(()=>castAudio.id),'audio');
@@ -73,13 +75,25 @@ test('receiver binds audible audio, paints art, and switches lyrics/video withou
  await page.waitForFunction(()=>document.body.dataset.view==='lyrics');
  assert.equal(await page.locator('#lines .line').first().textContent(),'First lyric');
  await page.getByRole('button',{name:'Video',exact:true}).click();
- await page.evaluate(()=>receiverMessage({type:'video',trackId:'track-1',videoId:'abcdefghijk'}));
+ await page.evaluate(()=>receiverMessage({type:'video',trackId:'track-1',videoId:'abcdefghijk',segments:[]}));
+ if(failScriptOnce){
+   await page.waitForFunction(()=>document.getElementById('view-status').textContent==='Video unavailable');
+   await page.getByRole('button',{name:'Cover',exact:true}).click();
+   await page.getByRole('button',{name:'Video',exact:true}).click();
+   await page.evaluate(()=>receiverMessage({type:'video',trackId:'track-1',videoId:'abcdefghijk',segments:[]}));
+ }
  await page.waitForFunction(()=>document.body.dataset.view==='video');
+ await page.waitForFunction(()=>window.videoPlayer?.state===1);
+ assert.equal(youtubeRequests, failScriptOnce ? 2 : 1);
  assert.equal(await page.evaluate(()=>videoPlayer.muted),true);
  assert.equal(await page.evaluate(()=>castAudio.muted),false);
  assert.ok(await page.evaluate(()=>castAudio.currentTime)>0.4);
+ await page.evaluate(()=>{videoPlayer.state=3});
  await page.getByRole('button',{name:'Cover',exact:true}).click();
+ await page.waitForFunction(()=>videoPlayer.state===2);
  await page.waitForFunction(()=>document.body.dataset.view==='now');
  assert.ok(await page.evaluate(()=>sent.some(message=>message.type==='view'&&message.view==='video')));
  assert.deepEqual(errors,[]);
 });
+
+}
