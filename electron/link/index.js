@@ -139,6 +139,7 @@ function createLink({ server, db, remote, enabled = () => true }) {
   heartbeat.unref?.()
   const api = {
     store, auth,
+    identity(body) { return store.identity(body, currentUser()) },
     async createPairing() {
       if (!enabled()) throw new Error('Enable Phone Remote before pairing.')
       ensureDiscovery()

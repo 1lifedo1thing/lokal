@@ -1,4 +1,4 @@
-const { randomBytes, randomUUID, createHash, timingSafeEqual } = require('crypto')
+const { randomBytes, randomUUID, createHash, createHmac, timingSafeEqual } = require('crypto')
 const { MAX_BATCH, text, trackKey, nextClock, compareStamp } = require('./protocol')
 const { splitArtists } = require('../artistSplit')
 const { keepCommaSetFromDb } = require('../artistRoles')
@@ -63,6 +63,23 @@ class LinkStore {
   authenticate(token) {
     if (typeof token !== 'string' || token.length < 16 || token.length > 512) return null
     return this.db.prepare('SELECT id,name,user_id FROM remote_devices WHERE token_hash=? AND revoked=0').get(hash(token)) || null
+  }
+  // Reconnect discovery never needs to disclose the phone's bearer token.
+  // Prove possession of its persisted verifier using a fresh phone challenge.
+  identity({ deviceId, challenge }, userId) {
+    if (typeof deviceId !== 'string' || !/^[a-zA-Z0-9_-]{8,128}$/.test(deviceId) ||
+        typeof challenge !== 'string' || !/^[a-f0-9]{64}$/.test(challenge)) {
+      throw Object.assign(new Error('Invalid identity challenge.'), { status: 400 })
+    }
+    const device = this.db.prepare('SELECT token_hash,user_id FROM remote_devices WHERE id=? AND revoked=0').get(deviceId)
+    if (!device || device.user_id !== userId) {
+      throw Object.assign(new Error('Pairing is unavailable for this profile.'), { status: 401 })
+    }
+    const desktopId = this.deviceId
+    const proof = createHmac('sha256', Buffer.from(device.token_hash, 'hex'))
+      .update(JSON.stringify(['lokal-link-identity-v1', challenge, desktopId, deviceId, userId]))
+      .digest('hex')
+    return { desktopId, userId, proof }
   }
   devices(userId) { return this.db.prepare('SELECT id,name,created,last_seen,revoked FROM remote_devices WHERE user_id=? ORDER BY created DESC').all(userId) }
   revoke(id, userId) { return this.db.prepare('UPDATE remote_devices SET revoked=1 WHERE id=? AND user_id=?').run(id, userId).changes > 0 }
