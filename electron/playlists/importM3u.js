@@ -18,6 +18,20 @@ function basename(raw) {
   return value.trim()
 }
 
+// Match the longest available path tail (up to three segments), as in
+// Mornye's PlaylistPathIndex. Cross-device root names are not identities.
+function pathSegments(raw) {
+  let value = String(raw || '').trim()
+  if (/^file:/i.test(value)) {
+    try { value = new URL(value).pathname.replace(/^\/([a-z]:)/i, '$1') } catch {}
+  }
+  return value.replace(/\\/g, '/').split(/[?#]/)[0]
+    .split('/').filter(part => part && part !== '.' && part !== '..')
+    .map(part => {
+      try { return decodeURIComponent(part).toLocaleLowerCase() } catch { return part.toLocaleLowerCase() }
+    })
+}
+
 function parseM3U(content) {
   const entries = []
   let pending = null
@@ -53,18 +67,27 @@ function parseM3U(content) {
 function findByFilename(db, entry) {
   const fileName = basename(entry?.file_path).toLocaleLowerCase()
   if (!fileName) return null
-  // SQL limits candidates, then JS verifies the entire basename to avoid
-  // treating '_' and '%' as literal characters in a LIKE expression.
   const candidates = db.prepare(
     "SELECT id, file_path, title, artist FROM tracks WHERE file_path NOT LIKE 'ghost://%' AND LOWER(file_path) LIKE ? LIMIT 250"
   ).all('%' + fileName).filter(track => basename(track.file_path).toLocaleLowerCase() === fileName)
-  if (candidates.length === 1) return { id: candidates[0].id }
-  if (candidates.length < 2 || !entry.title) return null
+  const input = pathSegments(entry.file_path)
+  if (!input.length) return null
   const normalize = value => String(value || '').normalize('NFKC').toLocaleLowerCase().trim()
-  const exact = candidates.filter(track =>
-    normalize(track.title) === normalize(entry.title) &&
-    (!entry.artist || normalize(track.artist) === normalize(entry.artist)))
-  return exact.length === 1 ? { id: exact[0].id } : null
+  for (let depth = Math.min(3, input.length); depth >= 1; depth--) {
+    const suffix = input.slice(-depth).join('/')
+    const matches = candidates.filter(row => pathSegments(row.file_path).slice(-depth).join('/') === suffix)
+    if (matches.length === 1) return { id: matches[0].id }
+    if (!matches.length) continue
+    // A common filename is not enough to choose between recordings.
+    if (entry.title) {
+      const narrowed = matches.filter(row =>
+        normalize(row.title) === normalize(entry.title) &&
+        (!entry.artist || normalize(row.artist) === normalize(entry.artist)))
+      if (narrowed.length === 1) return { id: narrowed[0].id }
+    }
+    return null
+  }
+  return null
 }
 
 module.exports = { basename, parseM3U, findByFilename }
