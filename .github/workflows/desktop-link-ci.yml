@@ -1,9 +1,11 @@
-name: Desktop link playlist regression
+name: Desktop link regression
 
 on:
   pull_request:
     paths:
       - 'electron/link/**'
+      - 'server/index.js'
+      - 'scripts/link-persistence.test.mjs'
       - 'electron/network/**'
       - 'electron/ipc/remote.js'
       - 'scripts/link-lan-discovery.test.cjs'
@@ -38,3 +40,5 @@ jobs:
         run: npm run test:desktop-link-playlists
       - name: Test mobile history attribution and artwork guards
         run: npm run test:mobile-history-artwork
+      - name: Test durable pairing and authenticated address discovery
+        run: node --experimental-sqlite --test scripts/link-persistence.test.mjs
