@@ -21,4 +21,10 @@ function advertise({ id, port, name = os.hostname(), version }, { mdnsFactory = 
   timer.unref?.()
   return () => { clearInterval(timer); try { mdns.respond({ answers: records(0) }) } finally { mdns.destroy() } }
 }
-module.exports = { advertise }
+// Discovery belongs to the paired desktop, not the renderer's current profile.
+// Restart its lease after Phone Remote is toggled back on.
+function reconcileDiscovery({ enabled, paired, stop, start }) {
+  if (!enabled) { stop?.(); return undefined }
+  return stop || (paired ? start() : undefined)
+}
+module.exports = { advertise, reconcileDiscovery }

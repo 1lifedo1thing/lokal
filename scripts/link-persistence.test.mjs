@@ -56,3 +56,31 @@ test('proof is bound to challenge, profile and current pairing', () => {
     assert.notEqual(store.identity({ deviceId: phone, challenge }, user).proof, first)
   } finally { db.close() }
 })
+
+test('saved peers remain discoverable before their paired profile has loaded', () => {
+  const { db, store } = open(':memory:', { value: 1 })
+  try {
+    assert.equal(store.hasPairedDevices(), false)
+    paired(store)
+    assert.deepEqual(store.devices('guest'), [])
+    assert.equal(store.hasPairedDevices(), true)
+    store.revoke(phone, user)
+    assert.equal(store.hasPairedDevices(), false)
+  } finally { db.close() }
+})
+
+test('discovery restarts after disabling and re-enabling Phone Remote without pairing again', () => {
+  const { reconcileDiscovery } = require('../electron/link/discovery')
+  let starts = 0, stops = 0
+  const start = () => { starts++; return () => { stops++ } }
+  let stop = reconcileDiscovery({ enabled: true, paired: true, start })
+  stop = reconcileDiscovery({ enabled: true, paired: true, start, stop })
+  assert.equal(starts, 1)
+  stop = reconcileDiscovery({ enabled: false, paired: true, start, stop })
+  assert.equal(stops, 1)
+  assert.equal(stop, undefined)
+  stop = reconcileDiscovery({ enabled: true, paired: true, start, stop })
+  assert.equal(starts, 2)
+  stop()
+  assert.equal(reconcileDiscovery({ enabled: true, paired: false, start }), undefined)
+})

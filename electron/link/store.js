@@ -82,6 +82,7 @@ class LinkStore {
     return { desktopId, userId, proof }
   }
   devices(userId) { return this.db.prepare('SELECT id,name,created,last_seen,revoked FROM remote_devices WHERE user_id=? ORDER BY created DESC').all(userId) }
+  hasPairedDevices() { return Boolean(this.db.prepare('SELECT 1 FROM remote_devices WHERE revoked=0 LIMIT 1').get()) }
   revoke(id, userId) { return this.db.prepare('UPDATE remote_devices SET revoked=1 WHERE id=? AND user_id=?').run(id, userId).changes > 0 }
   touch(id) { this.db.prepare('UPDATE remote_devices SET last_seen=? WHERE id=?').run(this.now(), id) }
   pull(table, userId, cursor = 0) {
