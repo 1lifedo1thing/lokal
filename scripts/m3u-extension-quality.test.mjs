@@ -43,6 +43,20 @@ test('match relocated files by a unique real filename, never by guesswork', () =
   }), { id: '1' })
 })
 
+test('preserve unique longest path tail when file names repeat', () => {
+  const db = { prepare() { return { all() { return [
+    { id: 'a', file_path: '/Music/Album A/Track.flac', title: 'Track', artist: 'One' },
+    { id: 'b', file_path: '/Music/Album B/Track.flac', title: 'Track', artist: 'Two' },
+  ] } } } }
+  assert.deepEqual(findByFilename(db, {
+    file_path: 'C:\\Old\\Album A\\Track.flac',
+  }), { id: 'a' })
+  assert.equal(findByFilename(db, { file_path: 'Track.flac' }), null)
+  assert.deepEqual(findByFilename(db, {
+    file_path: 'Track.flac', title: 'Track', artist: 'Two',
+  }), { id: 'b' })
+})
+
 test('Mornye download choice overrides preference but rejects undeclared tiers', () => {
   const addon = {
     name: 'tidal-web',
