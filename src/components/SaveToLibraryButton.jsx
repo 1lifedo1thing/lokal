@@ -83,6 +83,10 @@ export default function SaveToLibraryButton({ track, getTrack, source, meta, siz
     const openFromPlayerMenu = (event) => {
       const eventKey = event.detail?.key
       if (eventKey == null || openMenuEventKey == null || String(eventKey) !== String(openMenuEventKey)) return
+      if (event.detail?.downloadNow === true) {
+        requestSave({ force: true })
+        return
+      }
       const rect = externalMenuButtonRef.current?.getBoundingClientRect()
       if (!rect) return
       setMenuPosition(null)
