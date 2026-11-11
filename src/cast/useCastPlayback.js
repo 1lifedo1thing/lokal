@@ -89,8 +89,9 @@ export function useCastPlayback(helpers) {
       session.sentCurrent = String(window.current.id)
       session.songPending = false
       session.syncs++
+      let loaded = false
       try {
-        await api.castSetWindow({
+        const result = await api.castSetWindow({
           current: window.current,
           upcoming: window.upcoming,
           repeat: window.repeat,
@@ -98,8 +99,13 @@ export function useCastPlayback(helpers) {
           play: play ?? player().isPlaying,
           reload,
         })
+        loaded = !result?.error
       } catch {} finally { session.syncs-- }
+      if (live !== session || !loaded) return
       sendUpNext()
+      // CAF may discard custom messages while LOAD is still starting its
+      // receiver. Re-send this recording's presentation after media is ready.
+      if (changedSong || reload || !session.extrasSent) sendExtras()
     }
 
     // ------------------------------------------------------------ Lokal's receiver
@@ -346,7 +352,6 @@ export function useCastPlayback(helpers) {
         ...(status.volume ? { volume: Number(status.volume.level) } : {}),
       })
       sendWindow({ position, play, force: true })
-      sendExtras()
     }
 
     const deactivate = ({ reason, last }) => {
@@ -395,7 +400,11 @@ export function useCastPlayback(helpers) {
     const offCast = useCastStore.subscribe((state, prev) => {
       if (state.session && state.session !== prev.session) activate(state.session)
       if (state.ended && state.ended !== prev.ended) deactivate(state.ended)
-      if (state.tvView !== prev.tvView) { sendLook(); sendVideo() }
+      if (state.tvView !== prev.tvView) {
+        sendLook()
+        if (state.tvView === 'lyrics') sendLyrics(true)
+        sendVideo()
+      }
       // Lokal's receiver known only after the session started: what it shows goes now.
       if (live && !live.extrasSent && state.status?.receiver === 'lokal') sendExtras()
     })

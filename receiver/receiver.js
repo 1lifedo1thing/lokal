@@ -225,6 +225,7 @@
     lines.appendChild(nodes)
     lines.classList.toggle('plain', !!state.lyrics && !state.lyrics.synced)
     box.classList.toggle('empty', !!state.lyrics && list.length === 0)
+    if (state.want === 'lyrics') $('view-status').textContent = ''
     if (view() === 'lyrics') tick(true)
   }
 
@@ -338,7 +339,7 @@
     applyView()
     loop()
   })
-  video.addEventListener('error', function () { if (state.video) { state.video = null; applyView() } })
+  video.addEventListener('error', function () { if (state.video) { state.video = null; $('view-status').textContent = 'Video unavailable'; applyView() } })
 
   function syncVideo(t) {
     var v = state.video
@@ -429,14 +430,19 @@
   var PROTOCOL = 1
 
   function onMessage(data) {
-    if (!data || typeof data !== 'object') return
+    // Native senders and raw Cast V2 clients can deliver either JSON form.
+    if (typeof data === 'string') { try { data = JSON.parse(data) } catch (_) { return } }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return
     state.senderProtocol = Number(data.protocol) || 1
+    if ((data.type === 'lyrics' || data.type === 'video') && state.track && data.trackId != null && String(data.trackId) !== state.track.id) return
     if (data.type === 'upnext') setUpNext(data.items)
     else if (data.type === 'lyrics') setLyrics(data)
     else if (data.type === 'video') setVideo(data.url || data.videoId ? data : null)
     else if (data.type === 'view') {
       if (data.view) state.want = data.view === 'lyrics' || data.view === 'video' ? data.view : 'nowplaying'
       if (/^#[0-9a-f]{3,8}$/i.test(String(data.accent || ''))) document.documentElement.style.setProperty('--accent', data.accent)
+      $('view-status').textContent = state.want === 'video' && (!state.video || !state.video.ready) ? 'Loading video…'
+        : state.want === 'lyrics' && (!state.lyrics || !state.track || state.lyrics.trackId !== state.track.id) ? 'Loading lyrics…' : ''
       applyView()
     }
   }

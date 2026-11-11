@@ -4,6 +4,7 @@ on:
     paths:
       - 'receiver/**'
       - 'electron/cast/**'
+      - 'src/cast/**'
       - 'scripts/cast-*.mjs'
       - '.github/workflows/cast-receiver-test.yml'
   workflow_dispatch:
@@ -30,4 +31,4 @@ jobs:
           NODE_PATH: ${{ runner.temp }}/cast-browser/node_modules
         run: |
           node --test scripts/cast-controller.test.mjs scripts/cast-media.test.mjs scripts/cast-window.test.mjs scripts/cast-protocol.test.mjs
-          node --test scripts/cast-receiver-browser.test.mjs
+          node --test scripts/cast-receiver-browser.test.mjs scripts/cast-playback-browser.test.mjs
