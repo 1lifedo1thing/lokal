@@ -9,6 +9,17 @@ import { downloadBatchCurrent } from './downloadCancellation.js'
 import { isGhostTrack, saveToLibrary, streamRef, isAddonProvider, missingTrackCanRedownload } from './onlineTracks.js'
 import { mapLimited, playbackSources, resolveRecommendationTracks, songKey } from './recommendations.js'
 
+async function ownedCopies(candidates, client, isCurrent) {
+  if (typeof client.findOwnedTracks !== 'function') return []
+  const out = []
+  for (let i = 0; i < candidates.length && isCurrent(); i += 5000) {
+    const rows = await client.findOwnedTracks(candidates.slice(i, i + 5000))
+    if (!Array.isArray(rows)) throw new Error(rows?.error || 'Could not check the library for existing songs')
+    out.push(...rows)
+  }
+  return out
+}
+
 /**
  * Download `ghosts` (a playlist's ghost tracks). Songs found in the library
  * take the ghost's place at once; the others are queued for download.
@@ -19,6 +30,7 @@ export async function downloadGhostSongs(ghosts, { client = api, save = saveToLi
   const list = (Array.isArray(ghosts) ? ghosts : []).filter(isGhostTrack)
   const result = { started: 0, existing: 0, failed: 0, notFound: 0 }
   if (!list.length) return result
+  const owned = await ownedCopies(list, client, isCurrent)
   const sources = await playbackSources(client)
   let done = 0
   const tally = (response) => {
@@ -27,9 +39,26 @@ export async function downloadGhostSongs(ghosts, { client = api, save = saveToLi
     else if (response?.error) result.failed++
     else result.started++
   }
-  await mapLimited(list, async (ghost) => {
+  await mapLimited(list, async (ghost, index) => {
     if (!isCurrent()) return
     try {
+      if (owned[index]?.id) {
+        const mismatch = differentDuration(ghost, owned[index])
+        if (mismatch && !confirmDuration) {
+          result.existing++
+          result.lengthReview = (result.lengthReview || 0) + 1
+          return
+        }
+        if (mismatch && await confirmDuration(ghost, owned[index]) !== true) {
+          result.declined = (result.declined || 0) + 1
+          return // Already owned: never queue another copy while awaiting a length decision.
+        }
+        if (!isCurrent()) return
+        const swapped = await client.resolveGhostTrack(ghost.id, owned[index].id, { requireMetadataMatch: true, dedupePlaylist: true, ...(mismatch ? { allowDurationMismatch: true } : {}) })
+        if (swapped?.ok) result.existing++
+        else result.failed++
+        return
+      }
       // A streamed song (YouTube, SoundCloud, an addon) already has its source.
       if (streamRef(ghost)) {
         tally(await save(ghost, {
@@ -98,7 +127,7 @@ export async function downloadGhostSongs(ghosts, { client = api, save = saveToLi
 }
 
 /** What downloadGhostSongs did, in a sentence. */
-export function ghostDownloadMessage({ started, existing, failed, notFound, cancelled, declined }) {
+export function ghostDownloadMessage({ started, existing, failed, notFound, cancelled, declined, lengthReview }) {
   return [
     cancelled && 'Stopped queuing songs',
     started && `Started ${started} download${started === 1 ? '' : 's'}`,
@@ -106,6 +135,7 @@ export function ghostDownloadMessage({ started, existing, failed, notFound, canc
     notFound && `${notFound} not found on your playback sources`,
     failed && `${failed} unavailable`,
     declined && `${declined} skipped`,
+    lengthReview && `${lengthReview} owned cop${lengthReview === 1 ? 'y has' : 'ies have'} a different length; choose a copy to relink`,
   ].filter(Boolean).join('; ') || 'No songs to download.'
 }
 
@@ -234,11 +264,13 @@ export async function downloadMissingProviderTracks(tracks, { client = api, save
     .map(track => [track.spotifyUri || track.videoId || songKey(track), track])).values()]
   const result = { started: 0, existing: 0, failed: 0, notFound: 0 }
   if (!unique.length || !isCurrent()) return result
+  const owned = await ownedCopies(unique, client, isCurrent)
   const sources = await playbackSources(client)
   let done = 0
-  await mapLimited(unique, async candidate => {
+  await mapLimited(unique, async (candidate, index) => {
     if (!isCurrent()) return
     try {
+      if (owned[index]?.id) { result.existing++; return }
       const [found] = await resolveRecommendationTracks([candidate], client, {
         sources, isCurrent, prepareStreams: false, preserveMatchMetadata: true,
       })

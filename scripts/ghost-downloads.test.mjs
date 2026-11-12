@@ -6,6 +6,8 @@ globalThis.window = globalThis.window || { addEventListener() {}, removeEventLis
 globalThis.localStorage = globalThis.localStorage || { getItem: () => null, setItem() {}, removeItem() {} }
 
 const { downloadGhostSongs, ghostDownloadMessage, redownloadMissingTrack } = await import('../src/ghostDownloads.js')
+const { downloadMissingProviderTracks } = await import('../src/ghostDownloads.js')
+const { relinkMergedPlayerState, mergedPlaybackContinuation, reuseMergedAudio } = await import('../src/mergedTracks.js')
 
 const imported = (i) => ({ id: `g${i}`, title: `Song ${i}`, artist: `Artist ${i}`, file_path: `ghost://spotify/pl-1/g${i}` })
 
@@ -22,6 +24,80 @@ function client({ inLibrary = [], online = [] } = {}) {
     resolveGhostTrack: async (ghostId, targetId) => { swaps.push([ghostId, targetId]); return { ok: true } },
   }
 }
+
+test('full-library ownership check stops imported, YouTube and addon ghosts before any download', async () => {
+  const c = client()
+  const ghosts = [imported(1), { ...imported(2), file_path: 'ghost://youtube/online/abcdefghijk' }, { ...imported(3), file_path: 'ghost://addon/0123456789/track' }]
+  c.findOwnedTracks = async candidates => {
+    assert.deepEqual(candidates, ghosts)
+    return candidates.map((candidate, i) => ({ id: `owned-${i}`, file_path: `/Music/${i}.flac` }))
+  }
+  c.searchTracks = c.onlineSearch = async () => { throw new Error('Ownership must be checked before searching sources') }
+  const result = await downloadGhostSongs(ghosts, { client: c, save: () => assert.fail('An owned song must not be downloaded') })
+  assert.equal(result.existing, 3)
+  assert.equal(result.started, 0)
+  assert.deepEqual(c.swaps, ghosts.map((ghost, i) => [ghost.id, `owned-${i}`]))
+})
+
+test('provider missing-song downloads skip contributor variants and Japanese titles before source resolution', async () => {
+  const tracks = [
+    { title: 'RIDGE RACER -one more win-', artist: 'Kimara Lovelace, RIDGE RACER Series', spotifyUri: 'spotify:track:first' },
+    { title: 'ひと夜のバカンス', artist: 'SOUL SCREAM', exact: true, provider: 'a-0123456789', id: 'second' },
+  ]
+  const c = client()
+  c.findOwnedTracks = async candidates => candidates.map((_, i) => ({ id: `owned-${i}`, file_path: `/Music/${i}.flac` }))
+  c.searchTracks = c.onlineSearch = c.onlineSave = async () => assert.fail('No source preparation for an owned recording')
+  const result = await downloadMissingProviderTracks(tracks, { client: c, save: () => assert.fail('No duplicate download') })
+  assert.equal(result.existing, 2)
+  assert.equal(result.started, 0)
+})
+
+test('failed ownership lookup stops the batch rather than downloading the library again', async () => {
+  const c = client()
+  c.findOwnedTracks = async () => ({ error: 'Library unavailable' })
+  await assert.rejects(downloadGhostSongs([imported(1)], { client: c, save: () => assert.fail('No download on a failed ownership check') }), /Library unavailable/)
+})
+
+test('merged track IDs are relinked throughout the loaded player without changing queue positions', () => {
+  const old = { id: 'old', file_path: '/Music/duplicate.flac', title: 'Song' }
+  const keeper = { id: 'kept', file_path: '/Music/song.flac', title: 'Song', download_source: 'tidal' }
+  const state = { currentTrack: old, queue: [old], originalQueue: [old], shuffleQueue: [old], playHistory: ['old'], futureHistory: ['old'], playNextIds: ['old'], queueIndex: 0 }
+  const patch = relinkMergedPlayerState(state, [{ removedIds: ['old'], track: keeper }])
+  assert.equal(patch.currentTrack.file_path, keeper.file_path)
+  for (const key of ['queue', 'originalQueue', 'shuffleQueue']) assert.equal(patch[key][0].id, 'kept')
+  for (const key of ['playHistory', 'futureHistory', 'playNextIds']) assert.deepEqual(patch[key], ['kept'])
+  assert.equal(state.queue[0].id, 'old', 'cached inputs are not mutated')
+})
+
+for (const decision of [undefined, false, true]) {
+  test(`an owned different-length recording is never downloaded again; relinking decision: ${decision}`, async () => {
+    const c = client()
+    const ghost = { ...imported(1), duration: 180 }
+    c.findOwnedTracks = async () => [{ id: 'owned', title: ghost.title, artist: ghost.artist, duration: 360, file_path: '/Music/song.flac' }]
+    const result = await downloadGhostSongs([ghost], { client: c,
+      ...(decision === undefined ? {} : { confirmDuration: async () => decision }),
+      save: () => assert.fail('Never download another copy of an owned recording'),
+    })
+    assert.equal(result.started, 0)
+    assert.equal(c.swaps.length, decision === true ? 1 : 0)
+    if (decision === undefined) assert.equal(result.lengthReview, 1)
+    if (decision === false) assert.equal(result.declined, 1)
+  })
+}
+
+test('merging the playing record preserves its position and reuses the same physical audio source', () => {
+  const state = { currentTrack: { id: 'old' }, progress: 42, playbackGeneration: 7 }
+  const replacements = [{ removedIds: ['old'], unchangedFileIds: ['old'], track: { id: 'kept' } }]
+  const continuation = mergedPlaybackContinuation(state, replacements)
+  const audio = { dataset: { lokalTrackId: 'old' }, currentSrc: '/api/stream/old', readyState: 4, currentTime: 42,
+    pause: () => assert.fail('Do not pause the shared source'), load: () => assert.fail('Do not reload the shared source') }
+  assert.equal(reuseMergedAudio(audio, continuation), true)
+  assert.equal(audio.currentTime, 42)
+  assert.equal(audio.dataset.lokalTrackId, 'kept')
+  assert.equal(continuation.position, 42)
+  assert.equal(state.playbackGeneration, 7)
+  assert.equal(reuseMergedAudio(audio, { ...continuation, sameSource: false }), false)
+})
 
 test('each imported ghost is found on the playback sources and downloaded to take its place', async () => {
   const saved = []
@@ -378,7 +454,7 @@ test('batch repair queues every supported missing library file and reports unsup
 })
 
 const { downloadMissingCollectionTracks } = await import('../src/ghostDownloads.js')
-const { downloadMissingProviderTracks } = await import('../src/ghostDownloads.js')
+
 
 test('Spotify provider metadata downloads skip library files and repeated entries without importing fake IDs', async () => {
   const c = client({
