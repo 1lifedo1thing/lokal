@@ -6,6 +6,7 @@ on:
       - 'electron/download/**'
       - 'electron/downloadFolder.js'
       - 'electron/ipc/scanner.js'
+      - 'electron/ipc/mergeDuplicates.js'
       - 'electron/ipc/walkMusicFiles.js'
       - 'electron/libraryWatcher.js'
       - 'electron/quality/**'
@@ -19,6 +20,7 @@ on:
       - 'src/ghostDownloads.js'
       - 'scripts/ghost-downloads.test.mjs'
       - 'scripts/download-integrity.test.mjs'
+      - 'scripts/library-duplicates.test.mjs'
       - 'scripts/startup-library-repair.test.mjs'
       - '.github/workflows/download-integrity-ci.yml'
   workflow_dispatch:
