@@ -76,21 +76,27 @@ test('a scan reads only new and changed files; a changed file keeps its library 
 
 test('a normal watcher update never enumerates the full music tree', async t => {
   const { music, write, reads, row, tags } = fixture(t)
-  const file = write('a.mp3')
+  // Put the changed file below a subfolder so its legitimate cover.jpg
+  // lookup cannot be confused with a root-wide library directory walk.
+  const album = path.join(music, 'Album')
+  fs.mkdirSync(album)
+  const file = path.join(album, 'a.mp3')
+  fs.writeFileSync(file, 'synthetic audio a')
   const untouched = write('b.mp3')
   await scanFolder(music)
   const stableId = row(untouched).id
   const original = fsp.readdir
-  let enumerations = 0
+  let rootEnumerations = 0
   t.mock.method(fsp, 'readdir', async (...args) => {
-    if (args[1]?.withFileTypes) {
-      enumerations++
-      throw new Error('a watcher update must not enumerate all music folders')
+    if (args[0] === music && args[1]?.withFileTypes) {
+      rootEnumerations++
     }
     return original(...args)
   })
   tags['a.mp3'] = { title: 'Updated' }
-  write('a.mp3', 'updated')
+  fs.writeFileSync(file, 'synthetic audio updated')
+  const changedAt = new Date(Date.now() + 15000)
+  fs.utimesSync(file, changedAt, changedAt)
   reads.length = 0
   const changes = await applyFileChanges([{ path: file }])
   assert.deepEqual(changes.added, [])
@@ -98,7 +104,7 @@ test('a normal watcher update never enumerates the full music tree', async t => 
   assert.equal(row(file).title, 'Updated')
   assert.equal(row(untouched).id, stableId)
   assert.deepEqual(reads, ['a.mp3'])
-  assert.equal(enumerations, 0, 'only changed audio paths should be scanned')
+  assert.equal(rootEnumerations, 0, 'a one-file watcher update must not walk the library root')
 })
 
 test('a locked database uses bounded backoff and is detected without dropping changes', () => {
