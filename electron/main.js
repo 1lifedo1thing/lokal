@@ -968,6 +968,21 @@ ipcMain.handle('window:refreshHitRegions', () => {
 
 createWindow()
 console.log(`[startup] Window created ${Date.now() - startupStarted}ms after Electron ready`)
+// A main-process synchronous SQLite call can make an already-visible window
+// appear completely frozen. Record any event-loop blockage independently of
+// the renderer so the next Windows log identifies which thread is stuck.
+let mainEventLoopBeat = require('node:perf_hooks').performance.now()
+let mainEventLoopLastWarning = -Infinity
+const mainEventLoopWatchdog = setInterval(() => {
+  const now = require('node:perf_hooks').performance.now()
+  const blockedMs = now - mainEventLoopBeat - 500
+  mainEventLoopBeat = now
+  if (blockedMs >= 220 && blockedMs <= 30000 && now - mainEventLoopLastWarning >= 4000) {
+    mainEventLoopLastWarning = now
+    console.warn(`[performance] Main process event loop unresponsive for ${Math.round(blockedMs)}ms`)
+  }
+}, 500)
+mainEventLoopWatchdog.unref?.()
 
 const bootProtocolUrl = process.argv.find(arg => typeof arg === 'string' && arg.startsWith(`${APP_PROTOCOL}://`))
 const bootToken = extractLastfmAuthToken(bootProtocolUrl || '')
