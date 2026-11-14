@@ -316,8 +316,10 @@ class DownloadManager {
         .catch(error => console.warn('[downloads] Startup library repair:', error.message))
     }, 4000).unref?.()
     if (resumed) setTimeout(() => this.pump(), 4000)
-    setTimeout(() => this.backfillSources(), 7000)
-    setTimeout(() => this.indexLeftovers(), 6000)
+    // Work on historical download jobs must not run as one uninterrupted
+    // SQLite/filesystem loop when the Home view has only just become visible.
+    setTimeout(() => { void this.backfillSources() }, 7000).unref?.()
+    setTimeout(() => { void this.indexLeftovers() }, 6000).unref?.()
   }
 
   /** Run the legacy same-file repair in a separate thread, not the UI thread. */
@@ -427,29 +429,49 @@ class DownloadManager {
   }
 
   /** Songs downloaded before sources were kept: their source, from the download history. */
-  backfillSources() {
+  async backfillSources() {
     try {
       const tag = this.db().prepare("UPDATE tracks SET download_source = ?, source_ref = COALESCE(source_ref, ?) WHERE id = ? AND download_source IS NULL")
+      let processed = 0
       for (const job of this.jobs.values()) {
         if (job.status !== 'done' || !job.indexedTracks?.length) continue
         const label = jobSourceLabel(job)
-        for (const track of job.indexedTracks) tag.run(label, job.sourceRef || null, track.id)
+        for (const track of job.indexedTracks) {
+          tag.run(label, job.sourceRef || null, track.id)
+          // Other IPC and Chromium input/paint work must run between batches.
+          if (++processed % 20 === 0) await new Promise(resolve => setImmediate(resolve))
+        }
       }
-    } catch {}
+    } catch (error) {
+      console.warn('[downloads] Backfill sources postponed:', error.message)
+    }
   }
 
   /** Files a previous session downloaded but never got to add to the library. */
   async indexLeftovers() {
     for (const job of [...this.jobs.values()]) {
       if (ACTIVE.has(job.status) || !job.pendingIndex?.length || !this.deps.index) continue
-      const files = job.pendingIndex.filter(fp => { try { return fs.existsSync(fp) } catch { return false } })
-      job.pendingIndex = []
+      // Checking many saved paths synchronously (especially a sleeping NAS)
+      // used to block the Electron UI thread several seconds after startup.
+      const files = []
+      for (const fp of job.pendingIndex) {
+        try {
+          if ((await require('../ipc/networkLibrary').withTimeout(fs.promises.stat)(fp)).isFile()) {
+            files.push(fp)
+          }
+        } catch {
+          // An offline root is not proof of deletion. Keep it pending so a
+          // later session may index it rather than silently dropping it.
+        }
+      }
+      job.pendingIndex = job.pendingIndex.filter(fp => !files.includes(fp))
       // A file stays pending until it's in the library, so a failed attempt
       // is tried again next time.
       for (const fp of files) {
         const before = job.indexedTracks.length
         await this.indexOne(job, fp)
         if (job.indexedTracks.length === before) job.pendingIndex.push(fp)
+        await new Promise(resolve => setImmediate(resolve))
       }
       this.persist(job)
     }
