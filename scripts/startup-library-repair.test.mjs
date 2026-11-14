@@ -18,11 +18,11 @@ test('startup never schedules an implicit legacy same-file repair', () => {
   const end = source.indexOf('  /** Run the legacy same-file repair', start)
   assert.ok(start > 0 && end > start, 'the download manager retains its init lifecycle')
   const bootstrap = source.slice(start, end)
-  assert.doesNotMatch(bootstrap, /this\\.repairStartupLibraryInBackground\\s*\\(/,
+  assert.equal(bootstrap.includes('this.repairStartupLibraryInBackground('), false,
     'a background worker can still hold the DB write lock and freeze foreground IPC')
-  assert.doesNotMatch(bootstrap, /this\\.repairSameFileRowsInWorker\\s*\\(/)
-  assert.match(bootstrap, /this\\.pump\\(\\)/, 'recover interrupted download jobs')
-  assert.match(source, /async repairStartupLibraryInBackground\\(\\)/,
+  assert.equal(bootstrap.includes('this.repairSameFileRowsInWorker('), false)
+  assert.equal(bootstrap.includes('this.pump()'), true, 'recover interrupted download jobs')
+  assert.equal(source.includes('async repairStartupLibraryInBackground()'), true,
     'keep the legacy repair available for explicit maintenance')
 })
 
