@@ -417,6 +417,14 @@ async function scanFolders(folderPaths = []) {
   return { folders, offlineFolders, results, status: scanStatus }
 }
 
+// A watcher-provided path must never turn into an unbounded scan of a
+// different root, even if a symlink or malformed notification is received.
+function isPathWithinRoot(folderPath, filePath) {
+  const relative = path.relative(path.resolve(folderPath), path.resolve(filePath))
+  return relative && relative !== '..' &&
+    !relative.startsWith('..' + path.sep) && !path.isAbsolute(relative)
+}
+
 function scansEveryRoot(db, folderPath) {
   const roots = configuredMusicFolders(db).map(root => path.resolve(root).toLowerCase())
   return roots.every(root => root === path.resolve(folderPath).toLowerCase())
@@ -429,6 +437,8 @@ async function scanFolder(folderPath, {
   persistArtistNamePreference = true,
   artistNamePreference = null,
   onInventory = null,
+  // Internal watcher scans only event paths; full scans still inventory roots.
+  filesToScan = null,
 } = {}) {
   const db = getDB()
   // Artist text depends on this preference as well as file metadata/mtime.
@@ -443,7 +453,11 @@ async function scanFolder(folderPath, {
     if (relinked) console.log(`[scanFolder] Re-linked artists for ${relinked} track(s)`)
   } catch (e) { console.warn('[scanFolder] Artist re-link skipped:', e.message) }
   const walkFailures = []
-  const files = await walkDir(folderPath, [], walkFailures)
+  const files = filesToScan == null
+    ? await walkDir(folderPath, [], walkFailures)
+    : [...new Set(filesToScan.map(file => path.resolve(file)))].filter(file =>
+      AUDIO_EXTS.has(path.extname(file).toLowerCase()) &&
+      isPathWithinRoot(folderPath, file))
   // Watcher reconciliation needs the exact same snapshot. Walking a NAS
   // twice adds avoidable I/O and can observe a different set of files if the
   // mount disconnects between the two enumerations.
@@ -2342,7 +2356,19 @@ async function applyFileChanges(changes = [], activeRoots) {
       readableAfterScan.set(root, false)
       continue
     }
-    await scanFolder(root, { saveRoot: false, watch: false })
+    const changedFiles = [...files].filter(file => rootFor(file) === root)
+    const rootHasRemovals = gone.some(file => rootFor(file) === root)
+    // The ordinary fs.watch notification is NOT a request to walk the whole
+    // music library. That turned each metadata edit into many thousands of
+    // synchronous SQLite lookups on Electron's UI/main process. Keep the
+    // full inventory path when a removal/rename needs pruning and transfer
+    // of likes/history to the replacement row.
+    await scanFolder(root, {
+      saveRoot: false,
+      watch: false,
+      filesToScan: rootHasRemovals ? null : changedFiles,
+      persistArtistNamePreference: false,
+    })
     readableAfterScan.set(root, await isReadableRoot(root))
   }
 
