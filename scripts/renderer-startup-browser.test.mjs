@@ -84,7 +84,7 @@ test('download popover keeps Addons and queue actions apart at normal and narrow
     return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) })
   })
   await page.goto(origin, { waitUntil: 'domcontentloaded' })
-  await page.waitForFunction(() => !!window.__startupDownloads && !!document.querySelector('[data-downloads-toggle]'))
+  await page.waitForFunction(() => !!window.__startupDownloads?.getState().loaded && !!document.querySelector('[data-downloads-toggle]'))
   await page.evaluate(() => window.__startupDownloads.setState({ jobs: [
     { id: 'busy', kind: 'single', title: 'Loading track', status: 'downloading', progress: 67, seen: false },
     { id: 'done', kind: 'single', title: 'Saved track', status: 'done', seen: false },
