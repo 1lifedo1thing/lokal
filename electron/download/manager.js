@@ -456,7 +456,7 @@ class DownloadManager {
       const files = []
       for (const fp of job.pendingIndex) {
         try {
-          if ((await require('../ipc/networkLibrary').withTimeout(fs.promises.stat)(fp)).isFile()) {
+          if ((await require('../ipc/networkLibrary').withTimeout(require('node:fs/promises').stat)(fp)).isFile()) {
             files.push(fp)
           }
         } catch {
