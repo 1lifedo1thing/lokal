@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import fsp from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
@@ -7,7 +8,7 @@ import { test } from 'node:test'
 const require = createRequire(import.meta.url)
 const { initDB, getDB } = require('../electron/ipc/db')
 const { scanFolder, applyFileChanges } = require('../electron/ipc/scanner')
-const { stopWatching, scanRootForCatchUp, discardPendingForRoot } = require('../electron/libraryWatcher')
+const { stopWatching, scanRootForCatchUp, discardPendingForRoot, busyRetryDelay, databaseBusy } = require('../electron/libraryWatcher')
 const { noteFileWritten } = require('../electron/fileStamp')
 const scanMetadata = require('../electron/ipc/scannerMetadata')
 
@@ -71,6 +72,41 @@ test('a scan reads only new and changed files; a changed file keeps its library 
   reads.length = 0
   await scanFolder(path.dirname(a))
   assert.deepEqual(reads, [])
+})
+
+test('a normal watcher update never enumerates the full music tree', async t => {
+  const { music, write, reads, row, tags } = fixture(t)
+  const file = write('a.mp3')
+  const untouched = write('b.mp3')
+  await scanFolder(music)
+  const stableId = row(untouched).id
+  const original = fsp.readdir
+  let enumerations = 0
+  t.mock.method(fsp, 'readdir', async (...args) => {
+    if (args[1]?.withFileTypes) {
+      enumerations++
+      throw new Error('a watcher update must not enumerate all music folders')
+    }
+    return original(...args)
+  })
+  tags['a.mp3'] = { title: 'Updated' }
+  write('a.mp3', 'updated')
+  reads.length = 0
+  const changes = await applyFileChanges([{ path: file }])
+  assert.deepEqual(changes.added, [])
+  assert.equal(changes.updated.length, 1)
+  assert.equal(row(file).title, 'Updated')
+  assert.equal(row(untouched).id, stableId)
+  assert.deepEqual(reads, ['a.mp3'])
+  assert.equal(enumerations, 0, 'only changed audio paths should be scanned')
+})
+
+test('a locked database uses bounded backoff and is detected without dropping changes', () => {
+  assert.equal(databaseBusy({ code: 'SQLITE_BUSY' }), true)
+  assert.equal(databaseBusy(new Error('database is locked')), true)
+  assert.equal(databaseBusy(new Error('Invalid audio file')), false)
+  assert.deepEqual([1, 2, 3, 4, 5, 10].map(busyRetryDelay),
+    [2000, 4000, 8000, 16000, 30000, 30000])
 })
 
 test('Windows path lookup matches an existing non-ASCII path', async t => {
