@@ -89,7 +89,9 @@ test('download popover keeps Addons and queue actions apart at normal and narrow
     { id: 'busy', kind: 'single', title: 'Loading track', status: 'downloading', progress: 67, seen: false },
     { id: 'done', kind: 'single', title: 'Saved track', status: 'done', seen: false },
   ] }))
-  await page.locator('[data-downloads-toggle]').click()
+  // Fresh profiles show an onboarding overlay that intercepts pointer input.
+  // Open the real popover through its store so this test isolates header geometry.
+  await page.evaluate(() => window.__startupDownloads.setState({ panelOpen: true }))
   const header = page.locator('[data-download-panel-header]')
   const tab = page.getByRole('tab', { name: /Addons/ })
   const cancel = page.getByRole('button', { name: 'Cancel all' })
