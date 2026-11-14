@@ -399,7 +399,8 @@ function stopWatching() {
   pending.clear()
   busyFailures = 0
   retryAfter = 0
-  deferUntil = 0
+  // Reconfiguring watchers must not accidentally cancel the boot grace
+  // period; the process retains this deadline until it naturally expires.
 }
 
 module.exports = {
