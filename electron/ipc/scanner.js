@@ -1439,6 +1439,22 @@ function registerScannerHandlers(ipcMain) {
     const db = getDB()
     return getArtistsPage(db, opts)
   })
+  // Discovery's one-time follow migration needs only names, not thousands of
+  // full artist objects or an artwork query for every artist. Return bounded
+  // indexed pages so the renderer can yield between batches.
+  ipcMain.handle('scanner:getDiscoveryArtistNamesPage', (_, opts = {}) => {
+    const limit = Math.min(200, Math.max(1, Number(opts.limit) || 200))
+    const offset = Math.max(0, Number(opts.offset) || 0)
+    return getDB().prepare(`
+      SELECT a.name FROM artists a
+      WHERE EXISTS (
+        SELECT 1 FROM artist_track_links atl
+        JOIN tracks t ON t.id = atl.track_id AND t.file_path NOT LIKE 'ghost://%'
+        WHERE atl.artist_id = a.id
+      )
+      ORDER BY a.name LIMIT ? OFFSET ?
+    `).all(limit, offset)
+  })
   ipcMain.handle('scanner:getArtist', (_, id) => {
     const db = getDB()
     let artist = findArtistById(db, id)

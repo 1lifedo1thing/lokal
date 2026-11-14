@@ -12,6 +12,20 @@ const Database = require('better-sqlite3')
 const { findByPath } = require('../electron/libraryPathIdentity')
 const workerFile = fileURLToPath(new URL('../electron/download/libraryRepairWorker.js', import.meta.url))
 
+test('startup never schedules an implicit legacy same-file repair', () => {
+  const source = fs.readFileSync(new URL('../electron/download/manager.js', import.meta.url), 'utf8')
+  const start = source.indexOf('  init() {')
+  const end = source.indexOf('  /** Run the legacy same-file repair', start)
+  assert.ok(start > 0 && end > start, 'the download manager retains its init lifecycle')
+  const bootstrap = source.slice(start, end)
+  assert.equal(bootstrap.includes('this.repairStartupLibraryInBackground('), false,
+    'a background worker can still hold the DB write lock and freeze foreground IPC')
+  assert.equal(bootstrap.includes('this.repairSameFileRowsInWorker('), false)
+  assert.equal(bootstrap.includes('this.pump()'), true, 'recover interrupted download jobs')
+  assert.equal(source.includes('async repairStartupLibraryInBackground()'), true,
+    'keep the legacy repair available for explicit maintenance')
+})
+
 test('exact library paths resolve without stat probes and duplicate inserts', t => {
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'lokal-startup-path-'))
   const database = new Database(':memory:')

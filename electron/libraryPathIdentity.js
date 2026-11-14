@@ -30,10 +30,9 @@ function sameFile(left, right) {
   } catch { return false }
 }
 function ensureIndex(db) { db.exec(`CREATE INDEX IF NOT EXISTS idx_tracks_physical_path ON tracks (${expression})`) }
-function repairSameFileRows(db) {
-  // Resolve physical aliases before opening the write transaction. A slow or
-  // disconnected NAS can make fs.statSync take seconds; holding a SQLite write
-  // transaction across those probes would stall ordinary playback/library IPC.
+function findVerifiedSameFileMerges(db) {
+  // File identities (including disconnected NAS aliases) are resolved BEFORE
+  // taking any write lock, and entirely off the Electron main thread.
   const merges = []
   const groups = db.prepare(`SELECT ${expression} AS identity FROM tracks WHERE file_path NOT LIKE 'ghost://%' AND file_path NOT LIKE 'stream://%' GROUP BY ${expression} HAVING COUNT(*)>1`).all()
   for (const group of groups) {
@@ -45,29 +44,67 @@ function repairSameFileRows(db) {
       }
     }
   }
+  return merges
+}
 
+function mergeVerifiedRows(db, merges) {
+  const currentKeeper = db.prepare('SELECT file_path FROM tracks WHERE id=?')
+  const currentLoser = db.prepare('SELECT * FROM tracks WHERE id=?')
+  let repaired = 0
+  for (const item of merges) {
+    // Never merge rows replaced by the scanner after identity verification.
+    if (currentKeeper.get(item.keeperId)?.file_path !== item.keeperPath) continue
+    const loser = currentLoser.get(item.loserId)
+    if (!loser || loser.file_path !== item.loserPath) continue
+    require('./mergeTrackReferences').mergeTrackReferences(db, item.keeperId, loser)
+    repaired++
+  }
+  return repaired
+}
+
+function staleAliasIds(db) {
+  return db.prepare('SELECT a.old_id FROM track_aliases a WHERE NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id=a.old_id)').all().map(row => row.old_id)
+}
+
+function reconcileAliasRows(db, ids) {
+  // Older merges can retain references in newer account/extension tables.
+  for (const oldId of ids) {
+    const keeper = require('./trackAlias').trackById(db, oldId)
+    if (keeper) require('./mergeTrackReferences').mergeTrackReferences(db, keeper.id, { id: oldId })
+  }
+}
+
+function repairSameFileRows(db) {
+  const merges = findVerifiedSameFileMerges(db)
   let repaired = 0
   db.transaction(() => {
-    const currentKeeper = db.prepare('SELECT file_path FROM tracks WHERE id=?')
-    const currentLoser = db.prepare('SELECT * FROM tracks WHERE id=?')
-    for (const item of merges) {
-      // Another scanner may have replaced a row while the slow filesystem
-      // probe was running. Only merge the exact rows we actually verified.
-      if (currentKeeper.get(item.keeperId)?.file_path !== item.keeperPath) continue
-      const loser = currentLoser.get(item.loserId)
-      if (!loser || loser.file_path !== item.loserPath) continue
-      require('./mergeTrackReferences').mergeTrackReferences(db, item.keeperId, loser)
-      repaired++
-    }
-    // Older merges recorded aliases but could leave references in newer
-    // account/extension tables. Relink only IDs whose row is already gone.
-    const aliases = db.prepare('SELECT a.old_id FROM track_aliases a WHERE NOT EXISTS (SELECT 1 FROM tracks t WHERE t.id=a.old_id)').all()
-    for (const { old_id } of aliases) {
-      const keeper = require('./trackAlias').trackById(db, old_id)
-      if (keeper) require('./mergeTrackReferences').mergeTrackReferences(db, keeper.id, { id: old_id })
-    }
+    repaired = mergeVerifiedRows(db, merges)
+    reconcileAliasRows(db, staleAliasIds(db))
     ensureIndex(db)
   })()
   return repaired
 }
-module.exports = { pathKey, expression, findByPath, ensureIndex, repairSameFileRows, sameFile }
+
+/** The worker's cooperative variant never holds a library-wide write lock.
+ * A single transaction covering thousands of aliases can block main-process
+ * SQLite IPC for several seconds even when that transaction runs in a worker.
+ * Keep each transaction short and leave a scheduling gap for foreground IO.
+ */
+async function repairSameFileRowsCooperative(db, { batchSize = 5, pauseMs = 15 } = {}) {
+  const merges = findVerifiedSameFileMerges(db)
+  const size = Math.max(1, Math.min(20, Math.floor(batchSize) || 5))
+  let repaired = 0
+  const yieldToForeground = () => new Promise(resolve => setTimeout(resolve, pauseMs))
+  for (let offset = 0; offset < merges.length; offset += size) {
+    repaired += db.transaction(() => mergeVerifiedRows(db, merges.slice(offset, offset + size)))()
+    await yieldToForeground()
+  }
+  const ids = staleAliasIds(db)
+  for (let offset = 0; offset < ids.length; offset += size) {
+    db.transaction(() => reconcileAliasRows(db, ids.slice(offset, offset + size)))()
+    await yieldToForeground()
+  }
+  ensureIndex(db)
+  return repaired
+}
+module.exports = { pathKey, expression, findByPath, ensureIndex, repairSameFileRows, repairSameFileRowsCooperative, sameFile }
