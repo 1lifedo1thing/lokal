@@ -306,15 +306,18 @@ class DownloadManager {
       }
       this.jobs.set(job.id, job)
     }
-    // Reconciliation can scan the entire music library and stat files on a
-    // disconnected drive. Never do that synchronously during Electron boot:
-    // it used to delay createWindow(), leaving a black screen for seconds.
+    // Do NOT automatically run legacy same-file/alias reconciliation at
+    // startup. PR #789 moved it to a worker after the black-screen regression,
+    // but its SQLite write transaction still blocks foreground IPC, freezing
+    // the *already visible* Home window (and failing unrelated lyrics writes
+    // with SQLITE_BUSY). An automatic repair is neither required to read/play
+    // an existing library nor safe on every launch.
+    //
+    // Keep repairSameFileRowsInWorker / repairStartupLibraryInBackground for
+    // explicit maintenance and existing migration tests. Normal track alias
+    // resolution, playlist references and in-flight download recovery continue.
     this.trimHistory()
     this.repairGhostIndexed()
-    setTimeout(() => {
-      this.repairStartupLibraryInBackground()
-        .catch(error => console.warn('[downloads] Startup library repair:', error.message))
-    }, 4000).unref?.()
     if (resumed) setTimeout(() => this.pump(), 4000)
     // Work on historical download jobs must not run as one uninterrupted
     // SQLite/filesystem loop when the Home view has only just become visible.
