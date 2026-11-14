@@ -463,6 +463,7 @@ function setPreferredMediaKeys(enabled) {
 }
 
 function createWindow() {
+  const windowCreatedAt = Date.now()
   const saved = loadWindowState()
   mainWindow = new BrowserWindow({
     icon: path.join(__dirname, process.platform === 'win32' ? '../public/lokal-icon.ico' : '../public/lokal-icon-rounded.png'),
@@ -480,7 +481,15 @@ function createWindow() {
       backgroundThrottling: false,
     },
   })
-  mainWindow.webContents.on('render-process-gone', closeNativeOutput)
+  mainWindow.webContents.on('render-process-gone', (_, details) => {
+    console.error('[startup] Renderer exited:', details?.reason || 'unknown')
+    closeNativeOutput()
+  })
+  mainWindow.webContents.on('did-fail-load', (_, errorCode, description, url, isMainFrame) => {
+    if (isMainFrame && errorCode !== -3) {
+      console.error('[startup] Main renderer failed to load:', errorCode, description)
+    }
+  })
   mainWindow.webContents.on('did-start-loading', closeNativeOutput)
   mainWindow.on('closed', () => {
     closeNativeOutput()
@@ -523,6 +532,11 @@ function createWindow() {
   })
   
   mainWindow.webContents.on('did-finish-load', () => {
+    console.log(`[startup] Renderer document loaded ${Date.now() - windowCreatedAt}ms after window creation`)
+    // Don't start file-index reconciliation during the first visible layout
+    // frames. Continue watching immediately; buffered changes are applied
+    // after the page has settled, never discarded.
+    try { require('./libraryWatcher').deferStartupWork(4500) } catch {}
     mainWindow.webContents.send('perf-settings', loadPerformanceSettings())
     if (pendingLastfmAuthToken) {
       mainWindow.webContents.send('lastfm:auth-token', pendingLastfmAuthToken)
@@ -588,7 +602,9 @@ app.whenReady().then(async () => {
       const legacy = db.prepare("SELECT value FROM settings WHERE key = 'music_folder'").get()?.value
       if (legacy) folders = [legacy]
     }
-    require('./libraryWatcher').watchLibraryRoots(folders)
+    const watcher = require('./libraryWatcher')
+    watcher.deferStartupWork(8000)
+    watcher.watchLibraryRoots(folders)
   } catch (e) { console.error('Library watcher:', e.message) }
   try { markInterruptedPlaylistsIncomplete() } catch (e) { console.error('Downloads:', e.message) }
   try { initPlugins() } catch (e) { console.error('Plugins:', e.message) }
