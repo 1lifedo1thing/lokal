@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'src/App.jsx'
+      - 'src/components/DownloadManager.jsx'
       - 'src/main.jsx'
       - 'src/RenderErrorBoundary.jsx'
       - 'src/mergedTracks.js'
