@@ -21,6 +21,7 @@ const mock = calls => async url => {
       : { wrapperType: 'collection', collectionId: 22, artistId: 200, artistName: 'Bones', collectionName: 'PaidProgramming2', trackCount: 12, releaseDate: '2025-01-01' },
   ]
   if (u.pathname === '/lookup' && p.entity === 'song') results = [
+    { wrapperType: 'collection', collectionId: Number(p.id), artistId: 200, artistName: 'Bones', collectionName: 'PaidProgramming2', trackCount: 1 },
     { wrapperType: 'track', kind: 'song', collectionId: Number(p.id), artistName: 'Bones', trackName: 'Test song', collectionName: 'PaidProgramming2', trackNumber: 1 },
   ]
   if (u.pathname === '/lookup' && !p.entity && p.id === '200') results = [
