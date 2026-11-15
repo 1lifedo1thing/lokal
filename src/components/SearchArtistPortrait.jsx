@@ -10,12 +10,12 @@ import { peekSearchArtistPortrait, resolveSearchArtistPortrait } from '../artist
 export default function SearchArtistPortrait({ name, localPath, imageUrl, className = 'w-full h-full object-cover', allowNameLookup = true, preferNameLookup = false, fallback = null }) {
   const [external, setExternal] = useState(() => peekSearchArtistPortrait(name))
   const [brokenLocal, setBrokenLocal] = useState(false)
-  const [brokenRemote, setBrokenRemote] = useState(false)
+  const [brokenRemoteUrl, setBrokenRemoteUrl] = useState('')
   const local = localPath && !brokenLocal
     ? (api.isElectron ? `file://${localPath}` : null) : null
   const known = /^https:\/\//.test(String(imageUrl || '')) ? imageUrl : ''
   useEffect(() => {
-    setExternal(peekSearchArtistPortrait(name)); setBrokenLocal(false); setBrokenRemote(false)
+    setExternal(peekSearchArtistPortrait(name)); setBrokenLocal(false); setBrokenRemoteUrl('')
   }, [name, localPath, known])
   useEffect(() => {
     let alive = true
@@ -28,7 +28,7 @@ export default function SearchArtistPortrait({ name, localPath, imageUrl, classN
   // Apple Search usually has no native portrait. Previously saved Apple
   // artwork may not match the Deezer portrait displayed in Search.
   const url = preferNameLookup && allowNameLookup ? (external || known) : (known || external)
-  return url && !brokenRemote
-    ? <QualityImage src={url} alt={name} className={className} onError={() => setBrokenRemote(true)} />
+  return url && url !== brokenRemoteUrl
+    ? <QualityImage src={url} alt={name} className={className} onError={() => setBrokenRemoteUrl(url)} />
     : (fallback || <User size={20} aria-label={name} />)
 }
