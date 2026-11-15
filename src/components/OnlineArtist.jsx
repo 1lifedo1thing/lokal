@@ -96,6 +96,32 @@ export function useOnlineArtist(fallbackName, enabled = true, { anchor = null, h
       if (nextSongs.tracks.length || nextAlbums.items.length) keepOnline(cacheKey, { songs: nextSongs, albums: nextAlbums })
     }
     ;(async () => {
+      // Every library and search artist page uses one catalogue metadata
+      // resolver. Global Search may supply an exact Apple artist ID; library
+      // pages supply their titles as evidence to disambiguate namesakes.
+      const explicitApple = anchor?.provider === 'catalogue:apple' && /^\d{1,20}$/.test(String(anchor.artistId || ''))
+      if (!String(anchor?.provider || '').startsWith('a-')) {
+        const catalogue = await timed(() => api.catalogueArtistDetails?.({
+          artist: fallbackName,
+          ...(explicitApple ? { catalogue: 'apple', artistId: anchor.artistId } : {}),
+          hints: hints.slice(0, 100),
+        }), 25000).catch(() => null)
+        if (!isCurrent()) return
+        if (catalogue?.albums?.length || catalogue?.tracks?.length) {
+          done({
+            loading: false, tracks: catalogue.tracks || [], error: '',
+            name: catalogue.name || fallbackName, image: catalogue.image || '',
+          }, { loading: false, items: catalogue.albums || [] })
+          return
+        }
+        // An explicitly selected artist ID may never silently open a
+        // different YouTube/Add-on artist with the same display name.
+        if (explicitApple) {
+          done({ loading: false, tracks: [], error: catalogue?.error || 'This catalogue artist is unavailable.',
+            name: fallbackName }, { loading: false, items: [] })
+          return
+        }
+      }
       // A click from an add-on's Artists tab already identifies the source and
       // artist ID. Load that exact artist before any name-based lookup, which
       // could otherwise open a namesake from YouTube Music or another source.
