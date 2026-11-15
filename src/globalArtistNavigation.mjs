@@ -22,7 +22,8 @@ export function globalArtistDestination(artist) {
   return {
     pathname, search: `?${params}`,
     state: { name, catalogueArtist: selected,
-      ...(/^https:\/\//.test(imageUrl) ? { artistPortrait: imageUrl } : {}),
+      ...(/^https:\/\//.test(imageUrl) ? { artistPortrait: imageUrl,
+        artistPortraitSource: artist?.portraitSource === 'followed' ? 'followed' : 'search' } : {}),
     },
   }
 }
