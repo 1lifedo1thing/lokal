@@ -213,10 +213,10 @@ export function OnlineArtistSections({ data, path, libraryTracks = null, library
   const albumTypes = useMemo(() => releaseTypeCounts(albumItems), [albumItems])
 
   const play = (selected, list = popularTracks) => playOnline(list, { selected, name, path })
-  const albumPath = album => onlineAlbumPath({ artist: album.artist || name, album: album.title, albumId: album.albumId, provider: album.provider, sourceAlbumId: album.sourceAlbumId })
+  const albumPath = album => onlineAlbumPath({ artist: album.artist || name, album: album.title, albumId: album.albumId, provider: album.provider, sourceAlbumId: album.sourceAlbumId, catalogue: album.catalogue, catalogueId: album.catalogueId })
   const openAlbum = album => nav(albumPath(album), { state: { artwork: album.artwork_url || null } })
   const albumTracks = async album => {
-    const result = await loadOnlineAlbumCached({ artist: album.artist || name, album: album.title, albumId: album.albumId, artwork: album.artwork_url, provider: album.provider, sourceAlbumId: album.sourceAlbumId })
+    const result = await loadOnlineAlbumCached({ artist: album.artist || name, album: album.title, albumId: album.albumId, artwork: album.artwork_url, provider: album.provider, sourceAlbumId: album.sourceAlbumId, catalogue: album.catalogue, catalogueId: album.catalogueId })
     if (!result.tracks.length) showToast(result.error || `No songs were found for “${album.title}”.`)
     return result.tracks
   }
