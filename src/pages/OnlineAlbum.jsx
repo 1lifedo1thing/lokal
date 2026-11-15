@@ -112,7 +112,7 @@ export default function OnlineAlbum() {
   const displayAlbum = state.title || album || anchor?.album || anchor?.title || t('Unknown album')
   const displayArtist = state.artist || artist
   const label = `“${displayAlbum}”`
-  const saved = useSavedOnlineAlbums(s => s.saved.has(onlineReleaseKey({ title: displayAlbum, artist: displayArtist })))
+  const saved = useSavedOnlineAlbums(s => s.saved.has(onlineReleaseKey({ title: displayAlbum, artist: displayArtist, catalogue, catalogueId })))
   useEffect(() => { loadSavedOnlineAlbums().catch(() => {}) }, [])
   const run = async (key, work) => {
     if (busy) return
