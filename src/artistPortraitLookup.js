@@ -23,9 +23,15 @@ export function resolveSearchArtistPortrait(name) {
   // Keep the API and artist matching exactly the same as Global Search's
   // original portrait resolution. The promise is shared across views.
   const entry = { image: '', expires: Date.now() + TTL, promise: null }
-  entry.promise = Promise.resolve()
-    .then(() => api.artistSearchMetadata(name, { source: 'deezer' }))
-    .then(rows => {
+  entry.promise = Promise.resolve().then(async () => {
+    let timer
+    try {
+      return await Promise.race([
+        Promise.resolve().then(() => api.artistSearchMetadata(name, { source: 'deezer' })),
+        new Promise(resolve => { timer = setTimeout(() => resolve([]), 8000) }),
+      ])
+    } finally { clearTimeout(timer) }
+  }).then(rows => {
       const row = Array.isArray(rows) ? rows.find(row => normalize(row?.title) === key) : null
       const image = String(row?.imageUrl || '')
       entry.image = /^https:\/\//.test(image) ? image : ''
