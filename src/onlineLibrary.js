@@ -5,7 +5,7 @@ import { create } from 'zustand'
 import { api } from './api'
 
 const part = value => String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase()
-export const onlineReleaseKey = album => `${part(album?.title || album?.album)}|${part(album?.artist || album?.album_artist || album?.artists)}`
+export const onlineReleaseKey = album => `${part(album?.title || album?.album)}|${part(album?.artist || album?.album_artist || album?.artists)}${album?.catalogue === 'apple' && /^\d{1,20}$/.test(String(album?.catalogueId || '')) ? `|apple:${album.catalogueId}` : ''}`
 
 export function normalizeOnlineRelease(album) {
   const title = String(album?.title || album?.album || '').trim()
@@ -17,6 +17,8 @@ export function normalizeOnlineRelease(album) {
     albumId: String(album?.albumId || '').slice(0, 300),
     provider: String(album?.provider || '').slice(0, 100),
     sourceAlbumId: String(album?.sourceAlbumId || '').slice(0, 300),
+    catalogue: album?.catalogue === 'apple' ? 'apple' : '',
+    catalogueId: album?.catalogue === 'apple' && /^\d{1,20}$/.test(String(album?.catalogueId || '')) ? String(album.catalogueId) : '',
     release_type: String(album?.release_type || 'album'),
     track_count: Number(album?.track_count) || 0,
     year: Number(album?.year) || null,

@@ -96,6 +96,32 @@ export function useOnlineArtist(fallbackName, enabled = true, { anchor = null, h
       if (nextSongs.tracks.length || nextAlbums.items.length) keepOnline(cacheKey, { songs: nextSongs, albums: nextAlbums })
     }
     ;(async () => {
+      // Every library and search artist page uses one catalogue metadata
+      // resolver. Global Search may supply an exact Apple artist ID; library
+      // pages supply their titles as evidence to disambiguate namesakes.
+      const explicitApple = anchor?.provider === 'catalogue:apple' && /^\d{1,20}$/.test(String(anchor.artistId || ''))
+      if (!String(anchor?.provider || '').startsWith('a-')) {
+        const catalogue = await timed(() => api.catalogueArtistDetails?.({
+          artist: fallbackName,
+          ...(explicitApple ? { catalogue: 'apple', artistId: anchor.artistId } : {}),
+          hints: hints.slice(0, 100),
+        }), 25000).catch(() => null)
+        if (!isCurrent()) return
+        if (catalogue?.albums?.length || catalogue?.tracks?.length) {
+          done({
+            loading: false, tracks: catalogue.tracks || [], error: '',
+            name: catalogue.name || fallbackName, image: catalogue.image || '',
+          }, { loading: false, items: catalogue.albums || [] })
+          return
+        }
+        // Ambiguous library identities and explicit catalogue IDs must not
+        // fall back to a name-only result from a potentially different artist.
+        if (explicitApple || /Cannot verify which same-named artist/.test(catalogue?.error || '')) {
+          done({ loading: false, tracks: [], error: catalogue?.error || 'This catalogue artist is unavailable.',
+            name: fallbackName }, { loading: false, items: [] })
+          return
+        }
+      }
       // A click from an add-on's Artists tab already identifies the source and
       // artist ID. Load that exact artist before any name-based lookup, which
       // could otherwise open a namesake from YouTube Music or another source.
@@ -187,10 +213,10 @@ export function OnlineArtistSections({ data, path, libraryTracks = null, library
   const albumTypes = useMemo(() => releaseTypeCounts(albumItems), [albumItems])
 
   const play = (selected, list = popularTracks) => playOnline(list, { selected, name, path })
-  const albumPath = album => onlineAlbumPath({ artist: album.artist || name, album: album.title, albumId: album.albumId, provider: album.provider, sourceAlbumId: album.sourceAlbumId })
+  const albumPath = album => onlineAlbumPath({ artist: album.artist || name, album: album.title, albumId: album.albumId, provider: album.provider, sourceAlbumId: album.sourceAlbumId, catalogue: album.catalogue, catalogueId: album.catalogueId })
   const openAlbum = album => nav(albumPath(album), { state: { artwork: album.artwork_url || null } })
   const albumTracks = async album => {
-    const result = await loadOnlineAlbumCached({ artist: album.artist || name, album: album.title, albumId: album.albumId, artwork: album.artwork_url, provider: album.provider, sourceAlbumId: album.sourceAlbumId })
+    const result = await loadOnlineAlbumCached({ artist: album.artist || name, album: album.title, albumId: album.albumId, artwork: album.artwork_url, provider: album.provider, sourceAlbumId: album.sourceAlbumId, catalogue: album.catalogue, catalogueId: album.catalogueId })
     if (!result.tracks.length) showToast(result.error || `No songs were found for “${album.title}”.`)
     return result.tracks
   }
