@@ -114,9 +114,9 @@ export function useOnlineArtist(fallbackName, enabled = true, { anchor = null, h
           }, { loading: false, items: catalogue.albums || [] })
           return
         }
-        // An explicitly selected artist ID may never silently open a
-        // different YouTube/Add-on artist with the same display name.
-        if (explicitApple) {
+        // Ambiguous library identities and explicit catalogue IDs must not
+        // fall back to a name-only result from a potentially different artist.
+        if (explicitApple || /Cannot verify which same-named artist/.test(catalogue?.error || '')) {
           done({ loading: false, tracks: [], error: catalogue?.error || 'This catalogue artist is unavailable.',
             name: fallbackName }, { loading: false, items: [] })
           return
