@@ -6,7 +6,7 @@ import { resolveSearchArtistPortrait } from '../artistPortraitLookup'
 import { useTranslation } from '../i18n'
 
 /** Follow / Following: a followed artist's releases show in Home → Releases. */
-export default function FollowArtistButton({ name, className, catalogueIdentity = null, imageUrl = '' }) {
+export default function FollowArtistButton({ name, className, catalogueIdentity = null, imageUrl = '', imageFromSearch = false }) {
   const { t } = useTranslation()
   const key = discoveryArtistKey(name)
   const selected = validFollowIdentity({ ...catalogueIdentity, imageUrl })
@@ -24,7 +24,7 @@ export default function FollowArtistButton({ name, className, catalogueIdentity 
       // The artist portrait visible in Online Search comes from this same
       // resolver for Apple artist results. Save it with the catalogue ID,
       // rather than replacing it with Apple's separate metadata page image.
-      const searchImage = !followed && selected?.catalogue === 'apple'
+      const searchImage = !followed && selected?.catalogue === 'apple' && !imageFromSearch
         ? await resolveSearchArtistPortrait(name) : ''
       const identity = selected && !followed
         ? { ...selected, imageUrl: searchImage || selected.imageUrl || '' }
