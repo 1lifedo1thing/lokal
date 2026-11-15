@@ -83,7 +83,7 @@ function ArtistCard({ artist, onClick, onPlay, onContextMenu, rank, animateIn = 
       <div className="relative aspect-square w-full overflow-hidden rounded-full ring-1 ring-white/10 shadow-lg shadow-black/40 transition-all duration-200 group-hover:ring-white/25">
         {artist.onlineFollowed ? (
           <SearchArtistPortrait name={artist.name} imageUrl={artist.imageUrl}
-            allowNameLookup={!artist.catalogue} fallback={<FallbackAvatar name={artist.name} />}
+            allowNameLookup preferNameLookup={artist.catalogue === 'apple'} fallback={<FallbackAvatar name={artist.name} />}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110" />
         ) : imgSrc ? (
           <FadeImg src={imgSrc} alt={artist.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110" />
@@ -126,7 +126,7 @@ function ArtistRow({ artist, onClick, onPlay, onContextMenu }) {
       <div className="relative h-10 w-10 overflow-hidden rounded-full bg-card">
         {artist.onlineFollowed
           ? <SearchArtistPortrait name={artist.name} imageUrl={artist.imageUrl}
-              allowNameLookup={!artist.catalogue} fallback={<FallbackAvatar name={artist.name} />} />
+              allowNameLookup preferNameLookup={artist.catalogue === 'apple'} fallback={<FallbackAvatar name={artist.name} />} />
           : imgSrc ? <FadeImg src={imgSrc} className="h-full w-full object-cover" />
           : <FallbackAvatar name={artist.name} />}
       </div>
