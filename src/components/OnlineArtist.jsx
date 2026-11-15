@@ -24,6 +24,7 @@ import { showToast } from './Toaster'
 import { useAppStore } from '../store/player'
 import { api } from '../api'
 import FollowArtistButton from './FollowArtistButton'
+import { peekSearchArtistPortrait, resolveSearchArtistPortrait } from '../artistPortraitLookup'
 import { useTranslation } from '../i18n'
 import { useArtistVisuals } from '../artistVisuals'
 import { ArtistTitle, ArtistMotionPortrait } from './ArtistEditorialMedia'
@@ -300,11 +301,29 @@ export function OnlineArtistSections({ data, path, libraryTracks = null, library
   )
 }
 
-export default function OnlineArtist({ id, name: givenName, anchor = null, catalogueIdentity = null, portrait = '' }) {
+export default function OnlineArtist({ id, name: givenName, anchor = null, catalogueIdentity = null, portrait = '', portraitSource = '' }) {
   const { t } = useTranslation()
   const nav = useNavigate()
   const userId = useAppStore(state => state.user?.id)
-  const data = useOnlineArtist(givenName || nameFromSlug(id), true, { anchor })
+  const lookupName = givenName || nameFromSlug(id)
+  const data = useOnlineArtist(lookupName, true, { anchor })
+  const isAppleCatalogue = catalogueIdentity?.catalogue === 'apple' || anchor?.provider === 'catalogue:apple'
+  const [searchPortrait, setSearchPortrait] = useState(() => peekSearchArtistPortrait(lookupName))
+  const [searchLookupDone, setSearchLookupDone] = useState(false)
+  useEffect(() => {
+    let active = true
+    const hit = peekSearchArtistPortrait(lookupName)
+    setSearchPortrait(hit)
+    setSearchLookupDone(!!hit)
+    // The exact same fallback resolver powers Online Search and the Artists
+    // grid. Do not replace that portrait with another provider's artwork.
+    if (isAppleCatalogue || !portrait) {
+      resolveSearchArtistPortrait(lookupName).then(image => {
+        if (active) { setSearchPortrait(image); setSearchLookupDone(true) }
+      })
+    }
+    return () => { active = false }
+  }, [lookupName, isAppleCatalogue, portrait])
   // Songs of theirs in the library (downloaded since this page opened, say):
   // marked "In library" here; the page itself stays as it is.
   const [libraryTracks, setLibraryTracks] = useState([])
@@ -330,9 +349,15 @@ export default function OnlineArtist({ id, name: givenName, anchor = null, catal
     setBusy(true)
     try { await downloadOnline(songs.tracks, { label: `${name}'s popular songs` }) } finally { setBusy(false) }
   }
-  const verifiedPortrait = songs.image || portrait || ''
-  // A cover from a popular song is not proof of an artist's portrait,
-  // particularly for catalogue IDs shared by different namesakes.
+  // A Search result with an explicit portrait remains authoritative.
+  // Other Apple portraits (including pre-fix saved follows) are upgraded to
+  // the same Deezer image Online Search shows, when one is available.
+  const directSearchPortrait = portraitSource === 'search' ? portrait : ''
+  const verifiedPortrait = directSearchPortrait ||
+    (isAppleCatalogue
+      ? (searchPortrait || (searchLookupDone ? portrait || songs.image || '' : ''))
+      : (portrait || searchPortrait || songs.image || ''))
+  // Do not use a song/album cover as a catalogue artist portrait.
   const image = verifiedPortrait || (!catalogueIdentity
     ? (songs.tracks.find(track => track.artwork_url)?.artwork_url ||
        albums.items.find(album => album.artwork_url)?.artwork_url || '')
