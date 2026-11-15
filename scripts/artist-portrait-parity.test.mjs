@@ -65,6 +65,6 @@ test('Search, Follow, Artists and detail all consume the same portrait resolver'
   assert.match(artists, /peekSearchArtistPortrait\(artist\.name\)/)
   assert.match(detail, /resolveSearchArtistPortrait\(lookupName\)/)
   assert.match(detail, /directSearchPortrait \|\|/)
-  assert.match(detail, /searchPortrait \|\| \(searchLookupDone/)
+  assert.match(detail, /searchPortrait \|\| portrait \|\| songs\.image/)
   assert.match(artistPage, /portraitSource=\{location\.state\?\.artistPortraitSource \|\| ''\}/)
 })
