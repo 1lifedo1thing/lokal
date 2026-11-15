@@ -21,6 +21,34 @@ async function read(endpoint, values, fetchImpl) {
   } finally { clearTimeout(timer) }
 }
 
+// iTunes artist rows have no portraits. Read the official Apple Music page
+// for this *exact* artist ID rather than a similarly named search hit.
+async function appleArtistPortrait(artistId, country, fetchImpl) {
+  if (!validId(artistId)) return ''
+  const url = new URL(`https://music.apple.com/${country.toLowerCase()}/artist/-/${artistId}`)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 6500)
+  try {
+    const response = await fetchImpl(url, {
+      signal: controller.signal, headers: { Accept: 'text/html' },
+    })
+    if (!response.ok || typeof response.text !== 'function') return ''
+    const html = (await response.text()).slice(0, 350000)
+    for (const tag of html.match(/<meta\s+[^>]*>/gi) || []) {
+      if (!/(?:property|name)\s*=\s*["'](?:og:image|twitter:image)["']/i.test(tag)) continue
+      const match = tag.match(/\bcontent\s*=\s*["']([^"']+)["']/i)
+      if (!match) continue
+      const value = match[1].replace(/&amp;/g, '&')
+      const candidate = new URL(value)
+      if (candidate.protocol === 'https:' &&
+          (candidate.hostname === 'mzstatic.com' || candidate.hostname.endsWith('.mzstatic.com')))
+        return candidate.toString()
+    }
+  } catch { /* The catalogue still works without a portrait. */ }
+  finally { clearTimeout(timer) }
+  return ''
+}
+
 const artistRow = row => row?.wrapperType === 'artist' && validId(row.artistId)
 const releaseRow = row => row?.wrapperType === 'collection' && validId(row.collectionId)
 const release = row => ({
@@ -80,10 +108,13 @@ async function artistCatalogue({ artist, catalogue, artistId, hints = [], countr
   if (!selectedId && candidates.length > 1 && known.size && !best.score)
     return { error: 'Cannot verify which same-named artist matches this library.' }
   const id = String(best.candidate.artistId)
-  const tracksRaw = await read('/lookup', { id, entity: 'song', sort: 'popular', limit: '25', country: region }, fetchImpl).catch(() => [])
+  const [tracksRaw, image] = await Promise.all([
+    read('/lookup', { id, entity: 'song', sort: 'popular', limit: '25', country: region }, fetchImpl).catch(() => []),
+    appleArtistPortrait(id, region, fetchImpl),
+  ])
   return {
     name: best.candidate.artistName || name, catalogue: 'apple', artistId: id,
-    image: '', albums: best.albums.map(release),
+    image, albums: best.albums.map(release),
     tracks: tracksRaw.filter(row => row.wrapperType === 'track' && row.kind === 'song' && norm(row.artistName) === norm(name)).map(song),
   }
 }

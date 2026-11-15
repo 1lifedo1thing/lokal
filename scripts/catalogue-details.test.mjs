@@ -55,6 +55,34 @@ test('ambiguous library artist names without a matching release are not guessed'
   assert.match(result.error, /Cannot verify/)
 })
 
+test('an exact Apple artist receives its own verified official portrait', async () => {
+  const fallback = mock([])
+  const fetchImpl = async url => {
+    if (new URL(url).hostname === 'music.apple.com') return {
+      ok: true, text: async () => '<meta content="https://is1-ssl.mzstatic.com/image/thumb/bones/600x600bb.jpg" property="og:image">',
+    }
+    return fallback(url)
+  }
+  const result = await artistCatalogue({
+    artist: 'Bones', catalogue: 'apple', artistId: '200',
+  }, { fetchImpl })
+  assert.equal(result.image, 'https://is1-ssl.mzstatic.com/image/thumb/bones/600x600bb.jpg')
+})
+
+test('unverified external OG images cannot masquerade as artist portraits', async () => {
+  const fallback = mock([])
+  const fetchImpl = async url => {
+    if (new URL(url).hostname === 'music.apple.com') return {
+      ok: true, text: async () => '<meta property="og:image" content="https://unrelated.example/other.jpg">',
+    }
+    return fallback(url)
+  }
+  const result = await artistCatalogue({
+    artist: 'Bones', catalogue: 'apple', artistId: '200',
+  }, { fetchImpl })
+  assert.equal(result.image, '')
+})
+
 test('album lookup uses exact collection IDs and returns the published track order', async () => {
   const calls = []
   const result = await albumCatalogue({

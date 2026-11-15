@@ -11,6 +11,14 @@ on:
       - 'src/onlineBrowse.js'
       - 'src/onlineLibrary.js'
       - 'src/components/OnlineArtist.jsx'
+      - 'src/components/FollowArtistButton.jsx'
+      - 'src/components/SearchArtistPortrait.jsx'
+      - 'src/discoveryArtists.js'
+      - 'src/globalArtistNavigation.mjs'
+      - 'src/pages/Artist.jsx'
+      - 'src/pages/Artists.jsx'
+      - 'scripts/followed-artists.test.mjs'
+      - 'scripts/global-catalogue.test.mjs'
       - 'src/components/GlobalCatalogueResults.jsx'
       - 'src/pages/OnlineAlbum.jsx'
       - 'src/pages/Albums.jsx'
@@ -40,5 +48,6 @@ jobs:
           node --check electron/preload.js
           node --check server/routes/online.js
           npm run test:catalogue-details
+          node --test scripts/followed-artists.test.mjs scripts/global-catalogue.test.mjs
       - name: Compile artist and album page changes
         run: npx vite build
