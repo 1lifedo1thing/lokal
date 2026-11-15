@@ -328,7 +328,13 @@ export default function OnlineArtist({ id, name: givenName, anchor = null, catal
     setBusy(true)
     try { await downloadOnline(songs.tracks, { label: `${name}'s popular songs` }) } finally { setBusy(false) }
   }
-  const image = songs.image || portrait || songs.tracks.find(track => track.artwork_url)?.artwork_url || albums.items.find(album => album.artwork_url)?.artwork_url || ''
+  const verifiedPortrait = songs.image || portrait || ''
+  // A cover from a popular song is not proof of an artist's portrait,
+  // particularly for catalogue IDs shared by different namesakes.
+  const image = verifiedPortrait || (!catalogueIdentity
+    ? (songs.tracks.find(track => track.artwork_url)?.artwork_url ||
+       albums.items.find(album => album.artwork_url)?.artwork_url || '')
+    : '')
 
   return (
     <div className="pb-8">
@@ -354,7 +360,7 @@ export default function OnlineArtist({ id, name: givenName, anchor = null, catal
               <button onClick={() => openRadio(nav, { artist: name, type: 'artist' }, userId)} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-4 py-2 text-sm text-white backdrop-blur-sm transition-colors hover:border-accent/50"><Radio size={15} /> {t('Artist radio')}</button>
               <button onClick={downloadPopular} disabled={!songs.tracks.length || busy} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-4 py-2 text-sm text-white backdrop-blur-sm transition-colors hover:border-accent/50 disabled:opacity-40"><Download size={15} /> {busy ? t('Finding songs…') : t('Download popular songs')}</button>
               <RefreshButton onClick={data.refresh} loading={data.loading} loadedAt={data.loadedAt} className="border-white/15 bg-black/30 backdrop-blur-sm" />
-              <FollowArtistButton name={name} catalogueIdentity={catalogueIdentity} imageUrl={image} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-4 py-2 text-sm text-white" />
+              <FollowArtistButton name={name} catalogueIdentity={catalogueIdentity} imageUrl={verifiedPortrait} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-4 py-2 text-sm text-white" />
             </div>
           </div>
         </div>
