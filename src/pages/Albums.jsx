@@ -438,13 +438,13 @@ export default function Albums() {
     ])
   }
 
-  const openSavedAlbum = album => navigate(onlineAlbumPath({ artist: album.artist, album: album.title, albumId: album.albumId, provider: album.provider, sourceAlbumId: album.sourceAlbumId }), { state: { artwork: album.artwork_url } })
+  const openSavedAlbum = album => navigate(onlineAlbumPath({ artist: album.artist, album: album.title, albumId: album.albumId, provider: album.provider, sourceAlbumId: album.sourceAlbumId, catalogue: album.catalogue, catalogueId: album.catalogueId }), { state: { artwork: album.artwork_url } })
 
   const playAlbumRelease = async (album) => {
     if (album.savedOnline) {
       try {
-        const result = await loadOnlineAlbumCached({ artist: album.artist, album: album.title, albumId: album.albumId, artwork: album.artwork_url, provider: album.provider, sourceAlbumId: album.sourceAlbumId })
-        if (result.tracks?.length) playOnline(result.tracks, { selected: result.tracks[0], name: album.title, path: onlineAlbumPath({ artist: album.artist, album: album.title, albumId: album.albumId, provider: album.provider, sourceAlbumId: album.sourceAlbumId }) })
+        const result = await loadOnlineAlbumCached({ artist: album.artist, album: album.title, albumId: album.albumId, artwork: album.artwork_url, provider: album.provider, sourceAlbumId: album.sourceAlbumId, catalogue: album.catalogue, catalogueId: album.catalogueId })
+        if (result.tracks?.length) playOnline(result.tracks, { selected: result.tracks[0], name: album.title, path: onlineAlbumPath({ artist: album.artist, album: album.title, albumId: album.albumId, provider: album.provider, sourceAlbumId: album.sourceAlbumId, catalogue: album.catalogue, catalogueId: album.catalogueId }) })
         else showToast(result.error || 'Could not find tracks for this online album.')
       } catch (error) { showToast(error.message || 'Could not play online album.') }
       return
