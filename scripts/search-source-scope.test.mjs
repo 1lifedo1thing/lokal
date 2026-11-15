@@ -149,9 +149,11 @@ test('normal Online Songs shows provider and addon results', () => {
 
 test('artist portrait lookup avoids album covers and only accepts matching artist identities', () => {
   const source = readFileSync(new URL('../src/components/SearchArtistPortrait.jsx', import.meta.url), 'utf8')
-  assert.match(source, /artistSearchMetadata\(name, \{ source: 'deezer' \}\)/)
-  assert.match(source, /normalize\(row\?\.title\) === key/)
-  assert.match(source, /if \(!known && \(!localPath \|\| !api\.isElectron \|\| brokenLocal\)\)/)
+  const sharedLookup = readFileSync(new URL('../src/artistPortraitLookup.js', import.meta.url), 'utf8')
+  assert.match(sharedLookup, /artistSearchMetadata\(name, \{ source: 'deezer' \}\)/)
+  assert.match(sharedLookup, /normalize\(row\?\.title\) === key/)
+  assert.match(source, /resolveSearchArtistPortrait\(name\)/)
+  assert.match(source, /preferNameLookup/)
   const results = readFileSync(new URL('../src/components/GlobalCatalogueResults.jsx', import.meta.url), 'utf8')
   assert.match(results, /<SearchArtistPortrait/)
 })
