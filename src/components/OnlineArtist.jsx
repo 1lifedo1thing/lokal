@@ -19,7 +19,7 @@ import { libraryAlbumCounts, releaseOwnership, artistCacheKey, keepOnline, peekO
 import { downloadOnline, playOnline } from '../onlineActions'
 import { playNextMany } from '../trackActions'
 import { openRadio } from '../radioActions'
-import { recommendationKey } from '../recommendations'
+import { recommendationKey, timed } from '../recommendations'
 import { showToast } from './Toaster'
 import { useAppStore } from '../store/player'
 import { api } from '../api'
@@ -168,7 +168,12 @@ export function useOnlineArtist(fallbackName, enabled = true, { anchor = null, h
       setSongs(nextSongs)
       const items = await loadOnlineArtistAlbums(found, result.tracks)
       done(nextSongs, { loading: false, items })
-    })()
+    })().catch(error => {
+      // Every refresh must settle even if a catalogue, addon or metadata
+      // resolver throws unexpectedly. Otherwise Refresh stays disabled.
+      done({ loading: false, tracks: [], error: error?.message || 'Could not load this artist.',
+        name: fallbackName }, { loading: false, items: [] })
+    })
     return () => { request.current++ }
   }, [fallbackName, enabled, reload, anchor?.provider, anchor?.artistId, anchor?.title]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -293,7 +298,7 @@ export function OnlineArtistSections({ data, path, libraryTracks = null, library
   )
 }
 
-export default function OnlineArtist({ id, name: givenName, anchor = null, catalogueIdentity = null }) {
+export default function OnlineArtist({ id, name: givenName, anchor = null, catalogueIdentity = null, portrait = '' }) {
   const { t } = useTranslation()
   const nav = useNavigate()
   const userId = useAppStore(state => state.user?.id)
@@ -323,7 +328,7 @@ export default function OnlineArtist({ id, name: givenName, anchor = null, catal
     setBusy(true)
     try { await downloadOnline(songs.tracks, { label: `${name}'s popular songs` }) } finally { setBusy(false) }
   }
-  const image = songs.image || songs.tracks.find(track => track.artwork_url)?.artwork_url || albums.items.find(album => album.artwork_url)?.artwork_url || ''
+  const image = songs.image || portrait || songs.tracks.find(track => track.artwork_url)?.artwork_url || albums.items.find(album => album.artwork_url)?.artwork_url || ''
 
   return (
     <div className="pb-8">
@@ -335,7 +340,7 @@ export default function OnlineArtist({ id, name: givenName, anchor = null, catal
         <div className="absolute inset-0 bg-gradient-to-t from-base via-base/20" />
         <div className="absolute bottom-5 left-8 right-8 flex items-end gap-5">
           <button type="button" onClick={image ? () => setZoom(true) : undefined} disabled={!image} title={image ? t('View the picture') : undefined} className={`relative flex h-24 w-24 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-border bg-elevated ${image ? 'cursor-zoom-in' : 'cursor-default'}`}>
-            {image ? <img src={image} alt="" className="h-full w-full object-cover" /> : <Music size={36} className="text-muted" />}
+            {image ? <img src={image} alt="" className="h-full w-full object-cover" /> : <span className="font-display text-3xl text-white/80">{name?.trim()?.[0]?.toUpperCase() || <Music size={36} />}</span>}
             <ArtistMotionPortrait src={artistVisuals.motionSrc} />
           </button>
           <ImageZoom src={image} alt={name} open={zoom} onClose={() => setZoom(false)} />
@@ -349,7 +354,7 @@ export default function OnlineArtist({ id, name: givenName, anchor = null, catal
               <button onClick={() => openRadio(nav, { artist: name, type: 'artist' }, userId)} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-4 py-2 text-sm text-white backdrop-blur-sm transition-colors hover:border-accent/50"><Radio size={15} /> {t('Artist radio')}</button>
               <button onClick={downloadPopular} disabled={!songs.tracks.length || busy} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-4 py-2 text-sm text-white backdrop-blur-sm transition-colors hover:border-accent/50 disabled:opacity-40"><Download size={15} /> {busy ? t('Finding songs…') : t('Download popular songs')}</button>
               <RefreshButton onClick={data.refresh} loading={data.loading} loadedAt={data.loadedAt} className="border-white/15 bg-black/30 backdrop-blur-sm" />
-              <FollowArtistButton name={name} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-4 py-2 text-sm text-white" />
+              <FollowArtistButton name={name} catalogueIdentity={catalogueIdentity} imageUrl={image} className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-black/30 px-4 py-2 text-sm text-white" />
             </div>
           </div>
         </div>
