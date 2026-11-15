@@ -27,7 +27,7 @@ function portrait(name) {
 
 /** Prefer stored artist portrait, then exact-name Deezer artist image.
  * Fetches are cached, bounded and do not block listing the text results. */
-export default function SearchArtistPortrait({ name, localPath, imageUrl, className = 'w-full h-full object-cover' }) {
+export default function SearchArtistPortrait({ name, localPath, imageUrl, className = 'w-full h-full object-cover', allowNameLookup = true, fallback = null }) {
   const [external, setExternal] = useState('')
   const [brokenLocal, setBrokenLocal] = useState(false)
   const [brokenRemote, setBrokenRemote] = useState(false)
@@ -39,14 +39,14 @@ export default function SearchArtistPortrait({ name, localPath, imageUrl, classN
   }, [name, localPath, known])
   useEffect(() => {
     let alive = true
-    if (!known && (!localPath || !api.isElectron || brokenLocal)) {
+    if (allowNameLookup && !known && (!localPath || !api.isElectron || brokenLocal)) {
       portrait(name).then(value => { if (alive) setExternal(value) })
     }
     return () => { alive = false }
-  }, [name, known, localPath, brokenLocal])
+  }, [name, known, localPath, brokenLocal, allowNameLookup])
   if (local) return <img src={local} alt={name} className={className} onError={() => setBrokenLocal(true)} />
   const url = known || external
   return url && !brokenRemote
     ? <QualityImage src={url} alt={name} className={className} onError={() => setBrokenRemote(true)} />
-    : <User size={20} aria-label={name} />
+    : (fallback || <User size={20} aria-label={name} />)
 }
