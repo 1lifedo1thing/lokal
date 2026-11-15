@@ -309,17 +309,15 @@ export default function OnlineArtist({ id, name: givenName, anchor = null, catal
   const data = useOnlineArtist(lookupName, true, { anchor })
   const isAppleCatalogue = catalogueIdentity?.catalogue === 'apple' || anchor?.provider === 'catalogue:apple'
   const [searchPortrait, setSearchPortrait] = useState(() => peekSearchArtistPortrait(lookupName))
-  const [searchLookupDone, setSearchLookupDone] = useState(false)
   useEffect(() => {
     let active = true
     const hit = peekSearchArtistPortrait(lookupName)
     setSearchPortrait(hit)
-    setSearchLookupDone(!!hit)
     // The exact same fallback resolver powers Online Search and the Artists
     // grid. Do not replace that portrait with another provider's artwork.
     if (isAppleCatalogue || !portrait) {
       resolveSearchArtistPortrait(lookupName).then(image => {
-        if (active) { setSearchPortrait(image); setSearchLookupDone(true) }
+        if (active) setSearchPortrait(image)
       })
     }
     return () => { active = false }
@@ -355,7 +353,7 @@ export default function OnlineArtist({ id, name: givenName, anchor = null, catal
   const directSearchPortrait = portraitSource === 'search' ? portrait : ''
   const verifiedPortrait = directSearchPortrait ||
     (isAppleCatalogue
-      ? (searchPortrait || (searchLookupDone ? portrait || songs.image || '' : ''))
+      ? (searchPortrait || portrait || songs.image || '')
       : (portrait || searchPortrait || songs.image || ''))
   // Do not use a song/album cover as a catalogue artist portrait.
   const image = verifiedPortrait || (!catalogueIdentity
