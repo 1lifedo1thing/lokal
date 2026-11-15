@@ -99,11 +99,13 @@ export function useOnlineArtist(fallbackName, enabled = true, { anchor = null, h
       // Every library and search artist page uses one catalogue metadata
       // resolver. Global Search may supply an exact Apple artist ID; library
       // pages supply their titles as evidence to disambiguate namesakes.
-      const explicitApple = anchor?.provider === 'catalogue:apple' && /^\d{1,20}$/.test(String(anchor.artistId || ''))
+      const exactCatalogue = ['catalogue:apple', 'catalogue:spotify'].includes(anchor?.provider)
+        && !!String(anchor.artistId || '').trim()
+      const selectedCatalogue = exactCatalogue ? anchor.provider.slice('catalogue:'.length) : ''
       if (!String(anchor?.provider || '').startsWith('a-')) {
         const catalogue = await timed(() => api.catalogueArtistDetails?.({
           artist: fallbackName,
-          ...(explicitApple ? { catalogue: 'apple', artistId: anchor.artistId } : {}),
+          ...(exactCatalogue ? { catalogue: selectedCatalogue, artistId: anchor.artistId } : {}),
           hints: hints.slice(0, 100),
         }), 25000).catch(() => null)
         if (!isCurrent()) return
@@ -116,7 +118,7 @@ export function useOnlineArtist(fallbackName, enabled = true, { anchor = null, h
         }
         // Ambiguous library identities and explicit catalogue IDs must not
         // fall back to a name-only result from a potentially different artist.
-        if (explicitApple || /Cannot verify which same-named artist/.test(catalogue?.error || '')) {
+        if (exactCatalogue || /Cannot verify which same-named artist/.test(catalogue?.error || '')) {
           done({ loading: false, tracks: [], error: catalogue?.error || 'This catalogue artist is unavailable.',
             name: fallbackName }, { loading: false, items: [] })
           return
