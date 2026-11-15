@@ -239,6 +239,7 @@ export default function Artist() {
       : onlineNames.current[onlineNameKey]?.anchor}
     catalogueIdentity={catalogueArtist}
     portrait={location.state?.artistPortrait || ''}
+    portraitSource={location.state?.artistPortraitSource || ''}
   />
   if (!artist) return <div className="p-6 text-muted text-sm">{t("Loading...")}</div>
 

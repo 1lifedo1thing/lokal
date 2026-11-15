@@ -8,6 +8,7 @@ import { api } from '../api'
 import { peekCache, writeCache, usePageReady } from '../pageCache'
 import FadeImg from '../components/FadeImg'
 import SearchArtistPortrait from '../components/SearchArtistPortrait'
+import { peekSearchArtistPortrait } from '../artistPortraitLookup'
 import { globalArtistDestination } from '../globalArtistNavigation.mjs'
 import { PlayGlyph } from '../components/CoverPlay'
 import ArtistRefreshAllModal from '../components/ArtistRefreshAllModal'
@@ -83,7 +84,7 @@ function ArtistCard({ artist, onClick, onPlay, onContextMenu, rank, animateIn = 
       <div className="relative aspect-square w-full overflow-hidden rounded-full ring-1 ring-white/10 shadow-lg shadow-black/40 transition-all duration-200 group-hover:ring-white/25">
         {artist.onlineFollowed ? (
           <SearchArtistPortrait name={artist.name} imageUrl={artist.imageUrl}
-            allowNameLookup={!artist.catalogue} fallback={<FallbackAvatar name={artist.name} />}
+            allowNameLookup preferNameLookup={artist.catalogue === 'apple'} fallback={<FallbackAvatar name={artist.name} />}
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110" />
         ) : imgSrc ? (
           <FadeImg src={imgSrc} alt={artist.name} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110" />
@@ -126,7 +127,7 @@ function ArtistRow({ artist, onClick, onPlay, onContextMenu }) {
       <div className="relative h-10 w-10 overflow-hidden rounded-full bg-card">
         {artist.onlineFollowed
           ? <SearchArtistPortrait name={artist.name} imageUrl={artist.imageUrl}
-              allowNameLookup={!artist.catalogue} fallback={<FallbackAvatar name={artist.name} />} />
+              allowNameLookup preferNameLookup={artist.catalogue === 'apple'} fallback={<FallbackAvatar name={artist.name} />} />
           : imgSrc ? <FadeImg src={imgSrc} className="h-full w-full object-cover" />
           : <FallbackAvatar name={artist.name} />}
       </div>
@@ -294,7 +295,9 @@ export default function Artists() {
     if (!artist.onlineFollowed) { navigate(`/artist/${artist.id}`); return }
     const route = globalArtistDestination({
       name: artist.name, catalogue: artist.catalogue,
-      catalogue_id: artist.artistId, artwork_url: artist.imageUrl,
+      catalogue_id: artist.artistId,
+      artwork_url: (artist.catalogue === 'apple' && peekSearchArtistPortrait(artist.name)) || artist.imageUrl,
+      portraitSource: 'followed',
     })
     if (!route) return
     const { state, ...target } = route
