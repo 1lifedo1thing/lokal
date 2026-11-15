@@ -8,6 +8,7 @@ import { api } from '../api'
 import { peekCache, writeCache, usePageReady } from '../pageCache'
 import FadeImg from '../components/FadeImg'
 import SearchArtistPortrait from '../components/SearchArtistPortrait'
+import { peekSearchArtistPortrait } from '../artistPortraitLookup'
 import { globalArtistDestination } from '../globalArtistNavigation.mjs'
 import { PlayGlyph } from '../components/CoverPlay'
 import ArtistRefreshAllModal from '../components/ArtistRefreshAllModal'
@@ -294,7 +295,9 @@ export default function Artists() {
     if (!artist.onlineFollowed) { navigate(`/artist/${artist.id}`); return }
     const route = globalArtistDestination({
       name: artist.name, catalogue: artist.catalogue,
-      catalogue_id: artist.artistId, artwork_url: artist.imageUrl,
+      catalogue_id: artist.artistId,
+      artwork_url: (artist.catalogue === 'apple' && peekSearchArtistPortrait(artist.name)) || artist.imageUrl,
+      portraitSource: 'followed',
     })
     if (!route) return
     const { state, ...target } = route
