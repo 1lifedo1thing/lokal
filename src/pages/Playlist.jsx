@@ -1,3 +1,4 @@
+import { fewerRepeatsShuffle, shuffleHistory } from '../fewerRepeatsShuffle.js'
 import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -316,7 +317,7 @@ export default function Playlist() {
 
   const shuffleTracks = () => {
     if (!playableTracks.length) return
-    const shuffled = [...playableTracks].sort(() => Math.random() - 0.5)
+    const shuffled = fewerRepeatsShuffle(playableTracks, shuffleHistory.recentIds)
     playQueue(shuffled, 0, playbackContext)
   }
 

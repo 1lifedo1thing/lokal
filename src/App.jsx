@@ -1,3 +1,4 @@
+import { shuffleHistory, SHUFFLE_HISTORY_LIMIT } from './fewerRepeatsShuffle.js'
 import { relinkMergedPlayerState, mergedPlaybackContinuation, reuseMergedAudio } from './mergedTracks.js'
 import { clearPageCache } from './pageCache.js'
 import { NativeAudioBridge, readOutputPreferences, saveOutputPreferences } from './audio/nativeOutput'
@@ -910,6 +911,13 @@ export default function App() {
   const volumeRef = useRef(volume)
   const [audioOutputReady, setAudioOutputReady] = useState(0)
   const { user } = useAppStore()
+  useEffect(() => {
+    void shuffleHistory.load(async () => {
+      const tracks = await api.getHistory(user?.id, SHUFFLE_HISTORY_LIMIT)
+      return tracks.map(track => track.id)
+    })
+  }, [user?.id])
+
   const { showOnboarding, completeOnboarding, loading: onboardingLoading } = useOnboarding()
 
   useEffect(() => {
@@ -2383,7 +2391,10 @@ export default function App() {
     if (trackId) lastFlushedTrackIdRef.current = trackId
     tryScrobbleLastfmTrack(flushedTrack, secs)
     trySubmitListenBrainz(flushedTrack, secs)
-    if (secs >= 3 && trackId && !isStationTrack(flushedTrack)) api.incrementPlayTime(trackId, userRef.current?.id, secs)
+    if (secs >= 3 && trackId && !isStationTrack(flushedTrack)) {
+      shuffleHistory.remember(trackId)
+      api.incrementPlayTime(trackId, userRef.current?.id, secs)
+    }
   }, [tryScrobbleLastfmTrack, trySubmitListenBrainz])
 
   // Top up ordinary queues when fewer than 3 tracks remain.
