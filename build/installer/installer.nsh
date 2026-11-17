@@ -37,15 +37,7 @@ FunctionEnd
   !insertmacro MUI_PAGE_INIT
   !insertmacro MUI_PAGE_FUNCTION_FULLWINDOW
   Page custom LokalWelcome
-!macroend
 
-!macro customUnWelcomePage
-  !define MUI_WELCOMEPAGE_TITLE "Before you go."
-  !define MUI_WELCOMEPAGE_TEXT "This removes the Lokal application.$\r$\n$\r$\nYour music files and saved library data are kept."
-  !insertmacro MUI_UNPAGE_WELCOME
-!macroend
-
-!ifndef BUILD_UNINSTALLER
 Function LokalWelcome
   ; Updater runs must never stop at a welcome page.
   ${If} ${isUpdated}
@@ -97,4 +89,11 @@ Function LokalWelcome
   System::Call 'gdi32::DeleteObject(p $LokalSmallFont)'
 FunctionEnd
 
-!endif
+!macroend
+
+!macro customUnWelcomePage
+  !define MUI_WELCOMEPAGE_TITLE "Before you go."
+  !define MUI_WELCOMEPAGE_TEXT "This removes the Lokal application.$\r$\n$\r$\nYour music files and saved library data are kept."
+  !insertmacro MUI_UNPAGE_WELCOME
+!macroend
+
