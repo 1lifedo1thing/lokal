@@ -207,6 +207,10 @@ class CastDiscovery extends EventEmitter {
 async function probeAddress(host, { fetchImpl = (...args) => fetch(...args), timeoutMs = 2500 } = {}) {
   const address = String(host || '').trim()
   if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(address)) throw new Error('Enter the device\'s IP address, like 192.168.1.40')
+  try {
+    const sonos = await require('./upnp').describe(`http://${address}:1400/xml/device_description.xml`, fetchImpl)
+    if (sonos) return sonos
+  } catch {}
   let name = address
   let model = ''
   const controller = new AbortController()
@@ -221,3 +225,4 @@ async function probeAddress(host, { fetchImpl = (...args) => fetch(...args), tim
 }
 
 module.exports = { CastDiscovery, absorb, deviceOf, kindOf, txtMap, probeAddress, SERVICE, CAN }
+

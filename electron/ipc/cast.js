@@ -11,8 +11,11 @@ const { CastController } = require('../cast/controller')
 const { createCastMediaServer } = require('../cast/mediaServer')
 const { createCastMedia } = require('../cast/media')
 const { LOKAL_CAST_APP_ID } = require('../cast/appId')
+const { UpnpDiscovery } = require('../cast/upnp')
+const { UpnpController } = require('../cast/upnpController')
 
 let discovery = null
+let upnpDiscovery = null
 let controller = null
 let server = null
 let blocker = null
@@ -44,11 +47,14 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
     try {
       for (const device of JSON.parse(settings(getDB).cast_devices || '[]')) discovery.addManual(device)
     } catch {}
-    discovery.on('change', list => send('cast:devices', list))
+    upnpDiscovery = new UpnpDiscovery({ log })
+    const changed = () => send('cast:devices', [...discovery.list(), ...upnpDiscovery.list()])
+    discovery.on('change', changed)
+    upnpDiscovery.on('change', changed)
     return discovery
   }
 
-  const ensureController = () => {
+  const ensureController = (backend = 'chromecast') => {
     if (controller) return controller
     server = createCastMediaServer({ log })
     const sources = require('../online/sources')
@@ -71,7 +77,9 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
       trimCache: keep => cache.trim({ keep }),
       log,
     })
-    controller = new CastController({ media, server, appId: appIdFrom(), log })
+    controller = backend === 'upnp'
+      ? new UpnpController({ media, server, log })
+      : new CastController({ media, server, appId: appIdFrom(), log })
     controller.on('status', status => {
       send('cast:status', status)
       // The computer stays awake while the TV plays from it.
@@ -94,7 +102,8 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
   ipcMain.handle('cast:devices', () => {
     const found = ensureDiscovery()
     found.scan(15000)
-    return found.list()
+    upnpDiscovery.scan()
+    return [...found.list(), ...upnpDiscovery.list()]
   })
   ipcMain.handle('cast:addDevice', guard(async (_, address) => {
     const device = await probeAddress(address)
@@ -110,9 +119,15 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
     return { ok: true }
   }))
   ipcMain.handle('cast:connect', guard(async (_, deviceId) => {
-    const device = ensureDiscovery().get(deviceId)
+    ensureDiscovery()
+    const device = discovery.get(deviceId) || upnpDiscovery.get(deviceId)
     if (!device) throw new Error('That device is no longer on the network')
-    const session = ensureController()
+    if (controller) {
+      await controller.disconnect({ stopReceiver: true })
+      controller.removeAllListeners()
+      controller = null
+    }
+    const session = ensureController(device.backend)
     session.appId = appIdFrom()
     const result = await session.connect(device)
     saveSetting(getDB, 'cast_last_device', device.id)
@@ -157,6 +172,8 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
 async function shutdownCast() {
   try { await controller?.disconnect({ stopReceiver: true }) } catch {}
   try { discovery?.stop() } catch {}
+  try { upnpDiscovery?.stop() } catch {}
 }
 
 module.exports = { registerCastHandlers, shutdownCast }
+

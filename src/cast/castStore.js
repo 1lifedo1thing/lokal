@@ -28,7 +28,7 @@ export const useCastStore = create((set, get) => ({
   },
 
   setDevices: devices => set({ devices: Array.isArray(devices) ? devices : [] }),
-  setStatus: status => set({ status: status || { state: 'idle' } }),
+  setStatus: status => set({ status: status || { state: 'idle' }, error: status?.error || null }),
 
   /** The list (and a few seconds of looking hard: the menu is open). */
   refresh: async () => {
@@ -51,8 +51,11 @@ export const useCastStore = create((set, get) => ({
 
   /** Back to this computer: the TV's app is closed and the song carries on here, from where it was. */
   disconnect: async () => {
-    const last = await api.castDisconnect({ stopReceiver: true }).catch(() => null)
-    set({ ended: { reason: 'local', last: last || get().status, at: Date.now() }, session: null })
+    try {
+      const last = await api.castDisconnect({ stopReceiver: true })
+      if (last?.error) throw new Error(last.error)
+      set({ ended: { reason: 'local', last: last || get().status, at: Date.now() }, session: null, error: null })
+    } catch (error) { set({ error: friendly(error) }) }
   },
 
   /** The main process ended it (the TV was switched off, its app closed, the network went). */
@@ -82,3 +85,4 @@ function friendly(error) {
 
 /** Whether a device is a TV, a speaker or a group (the menu's icons). */
 export const deviceKind = device => (device?.kind === 'group' ? 'group' : device?.kind === 'speaker' ? 'speaker' : 'tv')
+
