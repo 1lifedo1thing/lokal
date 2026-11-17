@@ -1,46 +1,31 @@
 # Desktop installer design
 
-Design reference: https://lokal-music.github.io/mobile/
+Windows setup now uses a complete WPF interface, with custom window chrome,
+typography, controls, directory choice, progress, completion, recovery and removal
+screens. It uses the website's dark canvas, mint accent and record artwork.
 
-The website's near-black canvas (#080b0c), mint (#adf6d5), pale lime
-(#d9f5a1), serif accent and record grooves carry into installation. Assets
-are bundled and generated offline; setup never loads the website or fonts.
+The original NSIS executable embeds the small offline interface. Interactive
+launches hand off to it before any wizard appears. After the launcher exits and
+releases its mutex, the UI invokes that same NSIS engine with /S. Existing scope,
+app identity, file associations, updater compatibility and data retention stay
+owned by electron-builder. Silent CLI and in-app update invocations skip the UI.
+The UI reports indeterminate activity while the engine is actually running;
+success requires exit code zero and the installed executable to exist.
+A running app is reported in the custom recovery screen before installation.
+Windows UAC and the system folder picker remain OS dialogs.
 
-## Windows
+The UI targets the .NET Framework WPF runtime bundled with supported Windows
+versions; no WebView, online font or downloaded runtime is used. Native Windows
+packaging compiles Setup.cs and embeds Setup.xaml with the system compiler.
+Vector graphics, live text, keyboard focus and a DPI-awareness manifest keep
+text readable. Completion has an Open button and a Close button, with no launch
+checkbox. Temporary launcher files live in a unique per-user temporary directory.
 
-The native NSIS setup opens on a custom welcome screen: record artwork on
-the left, “Your music. Your world.” on the right. Windows text remains live
-and accessible. Continue through the standard current-user/all-users choice,
-installation folder, real installation progress, and a completion screen with
-an optional “Open Lokal” checkbox. Uninstall explains that music and library
-data are retained.
+macOS retains the branded drag-to-Applications DMG. Linux and MSIX retain their
+system install formats.
 
-The existing app ID, elevation, shortcuts, file associations, updater and
-uninstaller remain owned by electron-builder. Silent installs and updater runs
-skip the welcome page. The native title bar, keyboard navigation, focus and
-system buttons are retained.
-
-## macOS
-
-A matching 660 × 440 Finder window puts the app and Applications side by
-side, with a mint arrow and concise drag-to-install instructions. Launch
-instructions sit below the icons. The DMG is still the platform-standard
-drag installation, with the existing ZIP updater artifact.
-
-## Linux and Microsoft Store
-
-AppImage remains portable; DEB and MSIX use their system installation UI.
-No web-based wrapper or extra setup runtime is introduced.
-
-## Build and validation
-
-`npm run build` generates installer assets; `npm run gen:installer`
-can regenerate them alone. Development startup only regenerates app icons. SVG masters live in `build/installer`. Generated
-24-bit NSIS BMPs and the DMG PNG live under its ignored `generated` folder.
-
-`npm run test:installer` validates BMP row ordering/padding and image layout.
-The installer workflow compiles the real NSIS include using a harmless payload
-and a distinct smoke-test app ID, then tests silent installation, replacement
-and uninstallation on Windows. A Mac job builds the real DMG layout and
-verifies the resulting disk image with hdiutil. This verifies packaging and unattended update
-compatibility without installing Lokal or launching the fixture.
+The installer workflow compiles the real NSIS include with an isolated app ID,
+tests silent install/update/removal, renders all WPF screens, and exercises the
+WPF controller against the real NSIS fixture for install/update/removal. Screens
+are uploaded as CI artifacts. Local rendering uses the same compiled WPF code:
+Setup.exe --preview --name Lokal --snapshots <directory>.

@@ -27,6 +27,7 @@ function bitmap24(pixels, width, height) {
   return bytes
 }
 async function main() {
+  require('./build-setup-ui.cjs')()
   const sharp = require('sharp')
   await fs.mkdir(output, { recursive: true })
   for (const [name, width, height] of [['sidebar', 164, 314], ['header', 150, 57]]) {

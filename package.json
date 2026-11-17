@@ -195,9 +195,6 @@
       "runAfterFinish": true,
       "installerIcon": "public/lokal-icon.ico",
       "uninstallerIcon": "public/lokal-icon.ico",
-      "installerHeader": "build/installer/generated/header.bmp",
-      "installerSidebar": "build/installer/generated/sidebar.bmp",
-      "uninstallerSidebar": "build/installer/generated/sidebar.bmp",
       "include": "build/installer/installer.nsh"
     },
     "dmg": {
