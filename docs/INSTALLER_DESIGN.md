@@ -41,5 +41,6 @@ can regenerate them alone. Development startup only regenerates app icons. SVG m
 `npm run test:installer` validates BMP row ordering/padding and image layout.
 The installer workflow compiles the real NSIS include using a harmless payload
 and a distinct smoke-test app ID, then tests silent installation, replacement
-and uninstallation on Windows. This verifies packaging and unattended update
+and uninstallation on Windows. A Mac job builds the real DMG layout and
+verifies the resulting disk image with hdiutil. This verifies packaging and unattended update
 compatibility without installing Lokal or launching the fixture.
