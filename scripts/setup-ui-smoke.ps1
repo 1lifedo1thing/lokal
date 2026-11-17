@@ -18,6 +18,11 @@ function Invoke-SetupFixture([string]$mode, [bool]$existing, [string]$engine) {
   if ($run.ExitCode -ne 0) { throw "Custom UI $mode failed; inspect the engine screenshot artifact" }
 }
 Invoke-SetupFixture 'install' $false $installer.FullName
+# An older app may invoke --updated without /S; no setup window should appear.
+$update = Start-Process -FilePath $installer.FullName -ArgumentList "--updated /currentuser /D=$installDir" -Wait -PassThru -WindowStyle Hidden
+if ($update.ExitCode -ne 0) { throw 'Update intent did not bypass custom setup' }
+$unexpected = Get-Process Setup -ErrorAction SilentlyContinue | Where-Object { $_.Path -ne $setupExe }
+if ($unexpected) { throw 'A duplicate setup UI appeared during unattended update' }
 Invoke-SetupFixture 'install' $true $installer.FullName
 $uninstaller = Join-Path $installDir 'Uninstall LokalInstallerSmoke.exe'
 Invoke-SetupFixture 'uninstall' $true $uninstaller

@@ -4,6 +4,11 @@
 !include LogicLib.nsh
 
 !macro launchCustomSetup MODE
+  ; Older installed versions may call the updater without /S. Update intent
+  ; still bypasses the UI and preserves Builder\'s --force-run handling.
+  ${If} ${isUpdated}
+    SetSilent silent
+  ${EndIf}
   ${IfNot} ${Silent}
   ${AndIfNot} ${UAC_IsInnerInstance}
     GetTempFileName $R0
