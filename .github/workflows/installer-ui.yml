@@ -6,6 +6,7 @@ on:
       - 'scripts/generate-installer-assets.cjs'
       - 'scripts/generate-brand-icons.cjs'
       - 'scripts/installer-assets.test.cjs'
+      - 'scripts/installer-smoke-build.cjs'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/installer-ui.yml'
@@ -30,12 +31,7 @@ jobs:
         shell: pwsh
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-        run: |
-          $fixturePath = Join-Path $env:RUNNER_TEMP 'lokal-installer-fixture'
-          New-Item -ItemType Directory -Path (Join-Path $fixturePath 'resources') -Force | Out-Null
-          Set-Content -LiteralPath (Join-Path $fixturePath 'LokalInstallerSmoke.exe') -Value 'Packaging fixture; not an application.'
-          npx electron-builder --prepackaged "$fixturePath" --win nsis --x64 -c.appId=com.lokal.installer-smoke -c.productName=LokalInstallerSmoke -c.win.signAndEditExecutable=false -c.nsis.runAfterFinish=false -c.directories.output=installer-test-output --publish never
-          if ($LASTEXITCODE -ne 0) { throw 'NSIS compile failed' }
+        run: node scripts/installer-smoke-build.cjs
       - name: Exercise silent install, update and uninstall without touching Lokal
         shell: pwsh
         run: |
