@@ -30,11 +30,8 @@ Function ${PREFIX}LokalGUIInit
   SetCtlColors $0 "9aaba5" "080b0c"
 FunctionEnd
 !macroend
-!ifdef BUILD_UNINSTALLER
-  !insertmacro LokalChrome "un."
-!else
-  !insertmacro LokalChrome ""
-!endif
+!insertmacro LokalChrome ""
+!insertmacro LokalChrome "un."
 
 !macro customWelcomePage
   !insertmacro MUI_PAGE_INIT
