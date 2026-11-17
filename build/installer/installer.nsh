@@ -5,7 +5,6 @@
 !define MUI_TEXTCOLOR "f0f6f2"
 !define MUI_INSTFILESPAGE_COLORS "adf6d5 12191a"
 !define MUI_DIRECTORYPAGE_BGCOLOR "12191a"
-!define MUI_HEADERIMAGE_RIGHT
 !define MUI_CUSTOMFUNCTION_GUIINIT LokalGUIInit
 !define MUI_CUSTOMFUNCTION_UNGUIINIT un.LokalGUIInit
 !define MUI_FINISHPAGE_TITLE "You're ready to listen."
@@ -60,7 +59,7 @@ Function LokalWelcome
   File "/oname=$PLUGINSDIR\lokal-sidebar.bmp" "${BUILD_RESOURCES_DIR}\installer\generated\sidebar.bmp"
   ${NSD_CreateBitmap} 0u 0u 109u 193u ""
   Pop $LokalBitmap
-  ${NSD_SetImage} $LokalBitmap "$PLUGINSDIR\lokal-sidebar.bmp" $LokalBitmapHandle
+  ${NSD_SetStretchedImage} $LokalBitmap "$PLUGINSDIR\lokal-sidebar.bmp" $LokalBitmapHandle
   CreateFont $LokalTitleFont "Segoe UI" 23 700
   CreateFont $LokalSerifFont "Georgia" 23 400 /ITALIC
   CreateFont $LokalBodyFont "Segoe UI" 10

@@ -27,6 +27,6 @@ native/audio-output/build/
 build/webview2-signin/
 __pycache__/
 
-# Rebuilt offline from the installer SVG masters by gen:icons
+# Rebuilt offline from the installer SVG masters by gen:installer
 build/installer/generated/
 installer-test-output/

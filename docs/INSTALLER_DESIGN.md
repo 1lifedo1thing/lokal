@@ -34,8 +34,8 @@ No web-based wrapper or extra setup runtime is introduced.
 
 ## Build and validation
 
-`npm run gen:icons` also generates installer assets; `npm run gen:installer`
-can regenerate them alone. SVG masters live in `build/installer`. Generated
+`npm run build` generates installer assets; `npm run gen:installer`
+can regenerate them alone. Development startup only regenerates app icons. SVG masters live in `build/installer`. Generated
 24-bit NSIS BMPs and the DMG PNG live under its ignored `generated` folder.
 
 `npm run test:installer` validates BMP row ordering/padding and image layout.

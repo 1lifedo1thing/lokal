@@ -26,6 +26,7 @@ jobs:
           node-version: '24'
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run gen:icons
+      - run: npm run gen:installer
       - run: npm run test:installer
       - name: Compile the production NSIS UI with an isolated fixture payload
         shell: pwsh

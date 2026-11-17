@@ -19,5 +19,7 @@ async function main() {
       nsis: { ...config.nsis, runAfterFinish: false },
     },
   })
+  const files = await fs.readdir(path.join(root, 'installer-test-output'))
+  if (!files.some(file => file.endsWith('.exe') && !file.includes('__uninstaller'))) throw new Error('NSIS did not produce an installer')
 }
-main().catch(error => { console.error(error); process.exitCode = 1 })
+main().catch(error => { console.error(error); process.exit(1) })
