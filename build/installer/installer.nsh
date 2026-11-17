@@ -10,11 +10,11 @@
 !ifdef BUILD_UNINSTALLER
   !define MUI_CUSTOMFUNCTION_UNGUIINIT un.LokalGUIInit
 !endif
+!ifndef BUILD_UNINSTALLER
 !define MUI_FINISHPAGE_TITLE "You're ready to listen."
 !define MUI_FINISHPAGE_TEXT "Lokal is installed.$\r$\n$\r$\nOpen the player, add your music folders, and make yourself at home."
 !define MUI_FINISHPAGE_RUN_TEXT "Open Lokal"
 
-!ifndef BUILD_UNINSTALLER
 Var LokalDialog
 Var LokalControl
 Var LokalBitmap
