@@ -9,6 +9,7 @@ class UpnpController extends EventEmitter {
     super(); this.media = media; this.server = server; this.fetch = fetchImpl; this.log = log
     this.state = 'idle'; this.entries = []; this.prepared = new Map(); this.revision = 0; this.epoch = 0; this.serial = Promise.resolve()
     this.position = 0; this.playerState = 'IDLE'; this.volume = { level: 1, muted: false }
+    this.controls = 0
   }
   status() {
     return { state: this.state, device: this.device, receiver: this.device?.sonos ? 'sonos' : 'dlna', trackId: this.current?.trackId || null,
@@ -135,18 +136,23 @@ class UpnpController extends EventEmitter {
     this.entries.push(item)
   }
   async readVolume() {
+    const controls = this.controls; const epoch = this.epoch
     const v = await this.rc('GetVolume')
-    const level = Number(value(v, this.device.services.GroupRenderingControl ? 'CurrentVolume' : 'CurrentVolume'))
+    const level = Number(value(v, 'CurrentVolume'))
+    const m = await this.rc('GetMute')
+    if (controls !== this.controls || epoch !== this.epoch) return
     if (Number.isFinite(level)) this.volume.level = Math.max(0, Math.min(1, level / 100))
-    const m = await this.rc('GetMute'); this.volume.muted = value(m, 'CurrentMute') === '1'
+    this.volume.muted = value(m, 'CurrentMute') === '1'
   }
   async poll() {
     if (!this.current || this.state !== 'connected') return
     this.polling = true
     const epoch = this.epoch
+    const revision = this.revision
+    const controls = this.controls
     try {
       const [position, transport] = await Promise.all([this.av('GetPositionInfo'), this.av('GetTransportInfo')])
-      if (epoch !== this.epoch || this.syncing) return
+      if (epoch !== this.epoch || revision !== this.revision || controls !== this.controls || this.syncing) return
       this.failures = 0
       const uri = value(position, 'TrackURI')
       const item = this.entries.find(e => e.url === uri)
@@ -160,7 +166,7 @@ class UpnpController extends EventEmitter {
       this.position = seconds(value(position, 'RelTime')); this.positionAt = Date.now()
       this.playerState = state === 'PLAYING' ? 'PLAYING' : state === 'TRANSITIONING' ? 'BUFFERING' : state === 'PAUSED_PLAYBACK' ? 'PAUSED' : 'IDLE'
       await this.readVolume().catch(() => {})
-      if (epoch !== this.epoch) return
+      if (epoch !== this.epoch || controls !== this.controls) return
       this.publish()
       // STOP alone is not completion: require a last-seconds observation.
       if (state === 'STOPPED' && previous === 'PLAYING' && this.lastDuration > 0 && this.lastPosition >= this.lastDuration - 3 && !this.stopping && this.finishedFor !== this.current.trackId) {
@@ -174,10 +180,11 @@ class UpnpController extends EventEmitter {
     this.error = `Receiver unreachable: ${error.message}`; this.publish()
     if ((this.failures = (this.failures || 0) + 1) >= 4) this.end('lost')
   }
-  async play() { await this.av('Play', { Speed: 1 }); this.playerState = 'PLAYING'; this.publish() }
-  async pause() { await this.av('Pause'); this.playerState = 'PAUSED'; this.publish() }
-  async seek(position) { await this.av('Seek', { Unit: 'REL_TIME', Target: timestamp(position) }); this.position = Number(position); this.positionAt = Date.now(); this.publish() }
+  async play() { this.controls++; await this.av('Play', { Speed: 1 }); this.playerState = 'PLAYING'; this.publish() }
+  async pause() { this.controls++; await this.av('Pause'); this.playerState = 'PAUSED'; this.publish() }
+  async seek(position) { this.controls++; await this.av('Seek', { Unit: 'REL_TIME', Target: timestamp(position) }); this.position = Number(position); this.positionAt = Date.now(); this.publish() }
   async setVolume({ level, muted }) {
+    this.controls++
     if (level != null) { const n = Number(level); if (!Number.isFinite(n)) throw new Error('Invalid volume'); await this.rc('SetVolume', { DesiredVolume: Math.round(Math.max(0, Math.min(1, n)) * 100) }); this.volume.level = Math.max(0, Math.min(1, n)) }
     if (muted != null) { await this.rc('SetMute', { DesiredMute: muted ? 1 : 0 }); this.volume.muted = !!muted }
     this.publish()

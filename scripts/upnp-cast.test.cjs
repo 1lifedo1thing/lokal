@@ -96,6 +96,17 @@ test('unrelated external playback relinquishes ownership without stopping that m
 test('clock handles hours, invalid durations and negative seeks', () => {
   assert.equal(seconds('01:02:03'), 3723); assert.equal(seconds('NOT_IMPLEMENTED'), 0); assert.equal(timestamp(-5), '00:00:00')
 })
+test('a delayed status poll cannot undo a newer pause command', async t => {
+  const f = fixture(); t.after(() => f.controller.cleanup()); await f.controller.connect(device(true))
+  await f.controller.setWindow({ current: { id: 'a' }, upcoming: [] }); f.setUri('http://192.168.1.4/media/a')
+  let release; const blocked = new Promise(resolve => { release = resolve })
+  f.controller.fetch = async (url, options) => {
+    if (options.headers.SOAPAction.includes('GetPositionInfo')) await blocked
+    return f.fetchImpl(url, options)
+  }
+  const poll = f.controller.poll(); await f.controller.pause(); release(); await poll
+  assert.equal(f.controller.status().playerState, 'PAUSED')
+})
 test('selecting a grouped Sonos room targets its current coordinator without regrouping', async () => {
   const selected = { ...device(true), uuid: 'MEMBER', services: { ...device(true).services, ZoneGroupTopology: svc('ZoneGroupTopology') } }
   const topology = '<ZoneGroups><ZoneGroup Coordinator="MASTER"><ZoneGroupMember UUID="MEMBER" Location="http://192.168.1.20/device.xml"/><ZoneGroupMember UUID="MASTER" Location="http://192.168.1.30/device.xml"/></ZoneGroup></ZoneGroups>'
