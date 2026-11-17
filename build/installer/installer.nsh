@@ -89,10 +89,10 @@ Function LokalWelcome
   nsDialogs::Show
   Call muiPageUnloadFullWindow
   ${NSD_FreeImage} $LokalBitmapHandle
-  DeleteObject $LokalTitleFont
-  DeleteObject $LokalSerifFont
-  DeleteObject $LokalBodyFont
-  DeleteObject $LokalSmallFont
+  System::Call 'gdi32::DeleteObject(p $LokalTitleFont)'
+  System::Call 'gdi32::DeleteObject(p $LokalSerifFont)'
+  System::Call 'gdi32::DeleteObject(p $LokalBodyFont)'
+  System::Call 'gdi32::DeleteObject(p $LokalSmallFont)'
 FunctionEnd
 
 !endif
