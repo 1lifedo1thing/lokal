@@ -7,7 +7,9 @@
 !define MUI_DIRECTORYPAGE_BGCOLOR "12191a"
 !define MUI_DIRECTORYPAGE_TEXTCOLOR "f0f6f2"
 !define MUI_CUSTOMFUNCTION_GUIINIT LokalGUIInit
-!define MUI_CUSTOMFUNCTION_UNGUIINIT un.LokalGUIInit
+!ifdef BUILD_UNINSTALLER
+  !define MUI_CUSTOMFUNCTION_UNGUIINIT un.LokalGUIInit
+!endif
 !define MUI_FINISHPAGE_TITLE "You're ready to listen."
 !define MUI_FINISHPAGE_TEXT "Lokal is installed.$\r$\n$\r$\nOpen the player, add your music folders, and make yourself at home."
 !define MUI_FINISHPAGE_RUN_TEXT "Open Lokal"
@@ -31,7 +33,9 @@ Function ${PREFIX}LokalGUIInit
 FunctionEnd
 !macroend
 !insertmacro LokalChrome ""
-!insertmacro LokalChrome "un."
+!ifdef BUILD_UNINSTALLER
+  !insertmacro LokalChrome "un."
+!endif
 
 !macro customWelcomePage
   !insertmacro MUI_PAGE_INIT
