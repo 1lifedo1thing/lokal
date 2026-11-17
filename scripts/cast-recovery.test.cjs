@@ -2,7 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-function fixture(disconnect) {
+function fixture(disconnect, connect) {
   const source = fs.readFileSync(path.join(__dirname, '../src/cast/castStore.js'), 'utf8')
     .replace(/^import .*\n/gm, '').replaceAll('export const ', 'const ')
   let state
@@ -11,7 +11,7 @@ function fixture(disconnect) {
     state = init(set, () => state)
     return { getState: () => state, setState: set }
   }
-  const api = { castAvailable: () => true, castDisconnect: disconnect }
+  const api = { castAvailable: () => true, castDisconnect: disconnect, castConnect: connect }
   return new Function('create', 'api', source + '\nreturn useCastStore')(create, api)
 }
 test('failed Stop preserves the session and its error across routine polls', async () => {
@@ -37,4 +37,10 @@ test('ordinary confirmed disconnect retains the local-resume reason', async () =
   const store = fixture(async () => ({ state: 'connected', position: 25 }))
   await store.getState().disconnect()
   assert.equal(store.getState().ended.reason, 'local')
+})
+
+test('switching from an unconfirmed receiver requests a paused destination session', async () => {
+  const store = fixture(async () => null, async () => ({ previousStopped: false, status: { state: 'connected' } }))
+  await store.getState().connect('speaker')
+  assert.equal(store.getState().session.paused, true)
 })

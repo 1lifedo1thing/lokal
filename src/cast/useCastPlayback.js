@@ -376,7 +376,7 @@ export function useCastPlayback(helpers) {
         if (String(status.trackId) !== String(state.currentTrack?.id)) follow(status.trackId)
         live.tvTrackId = String(status.trackId)
         live.sentCurrent = String(status.trackId)
-        play = status.playerState === 'PLAYING' || status.playerState === 'BUFFERING'
+        play = !paused && (status.playerState === 'PLAYING' || status.playerState === 'BUFFERING')
         live.anchor = { position: Number(status.position) || 0, at: Number(status.positionAt) || Date.now(), playing: status.playerState === 'PLAYING' }
         position = now()
       } else {

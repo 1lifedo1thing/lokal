@@ -154,3 +154,11 @@ test('discovery rejects non-LAN receiver addresses before performing HTTP', asyn
 test('XML metadata strips forbidden controls while preserving valid whitespace', () => {
   assert.equal(escapeXml('A\u0000\u000B & B\n'), 'A &amp; B\n')
 })
+
+test('live discovery wins over stale manual addresses without duplicating devices', () => {
+  const { mergeDevices } = require('../electron/cast/discovery')
+  const found = mergeDevices([{ id: 'room', name: 'Old', host: '192.168.1.3', manual: true, kind: 'speaker' }],
+    [{ id: 'room', name: 'Kitchen', host: '192.168.1.50', kind: 'speaker' }, { id: 'tv', name: 'TV', kind: 'tv' }])
+  assert.equal(found.length, 2); assert.equal(found[0].id, 'tv')
+  assert.equal(found[1].host, '192.168.1.50'); assert.equal(found[1].manual, true)
+})

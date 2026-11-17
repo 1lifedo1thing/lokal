@@ -143,6 +143,7 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
     const session = ensureController(device.backend)
     session.appId = appIdFrom()
     const result = await session.connect(device)
+    if (!previousStopped && result.joined) await session.pause()
     saveSetting(getDB, 'cast_last_device', device.id)
     return { ...result, previousStopped, status: session.status() }
   })))
