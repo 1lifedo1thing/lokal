@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'build/installer/**'
+      - 'scripts/build-setup-ui.cjs'
+      - 'scripts/setup-ui-smoke.ps1'
       - 'scripts/generate-installer-assets.cjs'
       - 'scripts/generate-brand-icons.cjs'
       - 'scripts/installer-assets.test.cjs'
@@ -46,6 +48,9 @@ jobs:
           $uninstaller = Join-Path $installPath 'Uninstall LokalInstallerSmoke.exe'
           $removed = Start-Process -FilePath $uninstaller -ArgumentList "/S _?=$installPath" -Wait -PassThru -WindowStyle Hidden
           if ($removed.ExitCode -ne 0 -or (Test-Path -LiteralPath (Join-Path $installPath 'LokalInstallerSmoke.exe'))) { throw 'Silent uninstall failed' }
+      - name: Render all custom setup screens and exercise the UI against the real installer engine
+        shell: pwsh
+        run: ./scripts/setup-ui-smoke.ps1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
