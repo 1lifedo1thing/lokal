@@ -8,13 +8,14 @@ const svc = name => ({ url: `http://192.168.1.20/${name}`, type: `urn:schemas-up
 const device = sonos => ({ id: 'upnp:room', uuid: 'RINCON_20', name: 'Kitchen', host: '192.168.1.20', sonos,
   services: { AVTransport: svc('AVTransport'), RenderingControl: svc('RenderingControl'), ...(sonos ? { GroupRenderingControl: svc('GroupRenderingControl') } : {}) } })
 function fixture(sonos = true) {
-  const commands = []; const released = []; let uri = ''; let state = 'PLAYING'; let failStop = false
+  const commands = []; const released = []; let uri = ''; let state = 'PLAYING'; let failStop = false; let metadata = ''; let currentUri = ''
   const fetchImpl = async (url, options) => {
     const action = options.headers.SOAPAction.match(/#([^" ]+)/)[1]
     const doc = parseXml(options.body)
     commands.push({ action, doc, body: options.body })
     if (action === 'Stop' && failStop) throw new Error('receiver offline')
-    if (action === 'GetPositionInfo') return response(`<Track>2</Track><TrackURI>${uri}</TrackURI><RelTime>0:00:12</RelTime><TrackDuration>0:03:00</TrackDuration>`)
+    if (action === 'GetPositionInfo') return response(`<Track>2</Track><TrackURI>${escapeXml(uri)}</TrackURI><TrackMetaData>${escapeXml(metadata)}</TrackMetaData><RelTime>0:00:12</RelTime><TrackDuration>0:03:00</TrackDuration>`)
+    if (action === 'GetMediaInfo') return response(`<CurrentURI>${escapeXml(currentUri)}</CurrentURI>`)
     if (action === 'GetTransportInfo') return response(`<CurrentTransportState>${state}</CurrentTransportState>`)
     if (/Get.*Volume/.test(action)) return response('<CurrentVolume>37</CurrentVolume>')
     if (/Get.*Mute/.test(action)) return response('<CurrentMute>0</CurrentMute>')
@@ -24,18 +25,18 @@ function fixture(sonos = true) {
     mime: 'audio/flac', metadata: { title: `A & B <${track.id}>`, artist: 'Artist', albumName: 'Album', images: [{ url: 'http://192.168.1.4/art.jpg' }] } }), release: item => released.push(item) }
   const server = { start: async () => {}, stop: () => {} }
   const controller = new UpnpController({ media, server, fetchImpl })
-  return { controller, commands, released, fetchImpl, setUri: u => { uri = u }, setState: s => { state = s }, failStop: () => { failStop = true } }
+  return { controller, commands, released, fetchImpl, setUri: u => { uri = u }, setExternal: u => { uri = currentUri = u; metadata = `<DIDL-Lite><item><res>${escapeXml(u)}</res></item></DIDL-Lite>` }, setState: s => { state = s }, failStop: () => { failStop = true } }
 }
 test('SOAP metadata is a string, preserving XML entities through two encoding layers', async () => {
   let body
-  const item = { trackId: 'a', url: 'http://host/song?a=1&b=2', mime: 'audio/flac', metadata: { title: 'A & <B>', images: [{ url: 'http://host/a.jpg?a=1&b=2' }] } }
-  await soap('http://host/control', 'urn:test', 'SetAVTransportURI', { CurrentURIMetaData: didl(item) }, async (_, o) => { body = o.body; return response('') })
+  const item = { trackId: 'a', url: 'http://192.168.1.22/song?a=1&b=2', mime: 'audio/flac', metadata: { title: 'A & <B>', images: [{ url: 'http://192.168.1.22/a.jpg?a=1&b=2' }] } }
+  await soap('http://192.168.1.22/control', 'urn:test', 'SetAVTransportURI', { CurrentURIMetaData: didl(item) }, async (_, o) => { body = o.body; return response('') })
   const nested = parseXml(value(parseXml(body), 'CurrentURIMetaData'))
   assert.equal(value(nested, 'title'), 'A & <B>'); assert.equal(value(nested, 'res'), item.url)
   assert.equal(value(nested, 'albumArtURI'), item.metadata.images[0].url)
 })
 test('SOAP faults are failures even when HTTP reports success', async () => {
-  await assert.rejects(soap('http://host', 'urn:test', 'Play', {}, async () => response('<s:Fault><errorDescription>Transition unavailable</errorDescription></s:Fault>')), /Transition unavailable/)
+  await assert.rejects(soap('http://192.168.1.22', 'urn:test', 'Play', {}, async () => response('<s:Fault><errorDescription>Transition unavailable</errorDescription></s:Fault>')), /Transition unavailable/)
 })
 test('XML rejects DTDs and malformed nesting; handles namespaces and CDATA', () => {
   assert.throws(() => parseXml('<!DOCTYPE x><x/>'))
@@ -43,10 +44,10 @@ test('XML rejects DTDs and malformed nesting; handles namespaces and CDATA', () 
   assert.equal(value(parseXml('<s:a xmlns:s="x"><s:Title><![CDATA[A & B]]></s:Title></s:a>'), 'Title'), 'A & B')
 })
 test('description honors URLBase and distinguishes group volume from room volume', async () => {
-  const d = await describe('http://host/device.xml', async () => response('<URLBase>http://host:1400/</URLBase><device><deviceType>urn:schemas-upnp-org:device:ZonePlayer:1</deviceType><UDN>uuid:RINCON_1</UDN><manufacturer>Sonos</manufacturer><friendlyName>Kitchen</friendlyName><serviceList>' +
+  const d = await describe('http://192.168.1.22/device.xml', async () => response('<URLBase>http://192.168.1.22:1400/</URLBase><device><deviceType>urn:schemas-upnp-org:device:ZonePlayer:1</deviceType><UDN>uuid:RINCON_1</UDN><manufacturer>Sonos</manufacturer><friendlyName>Kitchen</friendlyName><serviceList>' +
     ['AVTransport', 'RenderingControl', 'GroupRenderingControl'].map(n => `<service><serviceType>urn:schemas-upnp-org:service:${n}:1</serviceType><controlURL>${n}</controlURL></service>`).join('') + '</serviceList></device>'))
-  assert.equal(d.services.RenderingControl.url, 'http://host:1400/RenderingControl')
-  assert.equal(d.services.GroupRenderingControl.url, 'http://host:1400/GroupRenderingControl')
+  assert.equal(d.services.RenderingControl.url, 'http://192.168.1.22:1400/RenderingControl')
+  assert.equal(d.services.GroupRenderingControl.url, 'http://192.168.1.22:1400/GroupRenderingControl')
   assert.equal(d.sonos, true)
 })
 test('Sonos stages a native queue with covers; edits preserve the playing item', async t => {
@@ -84,13 +85,13 @@ test('generic renderers get SetNextAVTransportURI and ordinary RenderingControl'
   await f.controller.setVolume({ level: .23 }); assert(f.commands.some(c => c.action === 'SetVolume'))
 })
 test('unconfirmed Stop keeps remote ownership and refuses local handoff', async t => {
-  const f = fixture(); t.after(() => f.controller.cleanup()); await f.controller.connect(device(true)); f.failStop()
+  const f = fixture(); t.after(() => f.controller.cleanup()); await f.controller.connect(device(true)); await f.controller.setWindow({ current: { id: 'a' }, upcoming: [] }); f.failStop()
   await assert.rejects(f.controller.disconnect(), /offline/); assert.equal(f.controller.status().state, 'connected')
 })
 test('unrelated external playback relinquishes ownership without stopping that music', async t => {
   const f = fixture(); t.after(() => f.controller.cleanup()); await f.controller.connect(device(true))
   await f.controller.setWindow({ current: { id: 'a' }, upcoming: [] }); const before = f.commands.filter(c => c.action === 'Stop').length
-  f.setUri('http://other-controller/music'); let ended; f.controller.on('ended', e => { ended = e }); await f.controller.poll()
+  f.setExternal('http://other-controller/music'); let ended; f.controller.on('ended', e => { ended = e }); await f.controller.poll()
   assert.equal(ended.reason, 'stopped'); assert.equal(f.commands.filter(c => c.action === 'Stop').length, before)
 })
 test('clock handles hours, invalid durations and negative seeks', () => {
@@ -118,4 +119,38 @@ test('selecting a grouped Sonos room targets its current coordinator without reg
   })
   assert.equal(master.id, selected.id); assert.equal(master.uuid, 'MASTER'); assert.equal(master.host, '192.168.1.30'); assert.equal(master.kind, 'group')
   assert.equal(calls.filter(c => c.options.method === 'POST').length, 1)
+})
+
+test('unrecognized references keep ownership inconclusive without overwriting the queue', async t => {
+  const f = fixture(); t.after(() => f.controller.cleanup()); await f.controller.connect(device(true))
+  await f.controller.setWindow({ current: { id: 'a' }, upcoming: [] })
+  f.setUri('x-rincon-queue:RINCON_20#0'); await f.controller.poll()
+  assert.equal(f.controller.status().state, 'connected')
+  assert.equal(f.controller.ownershipUncertain, true)
+  const before = f.commands.length
+  await f.controller.setWindow({ current: { id: 'b' }, upcoming: [] })
+  assert.equal(f.commands.length, before)
+})
+test('equivalent percent-encoded track references preserve the current item', async t => {
+  const f = fixture(); t.after(() => f.controller.cleanup()); await f.controller.connect(device(true))
+  await f.controller.setWindow({ current: { id: 'a' }, upcoming: [] })
+  f.setUri('http://192.168.1.4/media/%61'); await f.controller.poll()
+  assert.equal(f.controller.status().state, 'connected'); assert.equal(f.controller.status().trackId, 'a')
+})
+test('successful polls clear only the transient reachability error', async t => {
+  const f = fixture(); t.after(() => f.controller.cleanup()); await f.controller.connect(device(true))
+  await f.controller.setWindow({ current: { id: 'a' }, upcoming: [] }); f.setUri('http://192.168.1.4/media/a')
+  f.controller.failedPoll(new Error('temporary')); await f.controller.poll()
+  assert.equal(f.controller.status().error, null)
+  f.controller.error = 'A separate queue failure'; await f.controller.poll()
+  assert.equal(f.controller.status().error, 'A separate queue failure')
+})
+test('discovery rejects non-LAN receiver addresses before performing HTTP', async () => {
+  let requests = 0
+  for (const address of ['http://127.0.0.1/device', 'http://0.0.0.0/device', 'http://8.8.8.8/device', 'http://speaker.example/device'])
+    await assert.rejects(describe(address, async () => { requests++; return response('') }), /Unsupported receiver address/)
+  assert.equal(requests, 0)
+})
+test('XML metadata strips forbidden controls while preserving valid whitespace', () => {
+  assert.equal(escapeXml('A\u0000\u000B & B\n'), 'A &amp; B\n')
 })

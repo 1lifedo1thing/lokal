@@ -10,10 +10,15 @@ function lanUrl(input, base) {
   const url = new URL(input, base)
   // Descriptions may advertise URLs on other LAN interfaces, never credentials
   // or non-HTTP protocols. Playback media itself is served by Lokal's server.
-  if (url.protocol !== 'http:' || url.username || url.password) throw new Error('Unsupported receiver address')
+  const octets = url.hostname.split('.').map(Number)
+  const ipv4 = /^\d+\.\d+\.\d+\.\d+$/.test(url.hostname) && octets.every(n => n >= 0 && n <= 255)
+  const privateHost = ipv4 && (octets[0] === 10 || octets[0] === 192 && octets[1] === 168 ||
+    octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31 || octets[0] === 169 && octets[1] === 254)
+  if (url.protocol !== 'http:' || url.username || url.password || !privateHost) throw new Error('Unsupported receiver address')
   return url.href
 }
 async function request(url, options = {}, fetchImpl = fetch) {
+  url = lanUrl(url)
   const response = await fetchImpl(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(5000) })
   const text = await response.text()
   if (Buffer.byteLength(text) > 1024 * 1024) throw new Error('Receiver response too large')

@@ -1,6 +1,6 @@
 const { EventEmitter } = require('events')
 const { coordinator, soap, AV, RC, GROUP_RC, seconds, timestamp } = require('./upnp')
-const { didl, value } = require('./upnpXml')
+const { didl, value, parseXml, nodes } = require('./upnpXml')
 
 // Owns network I/O, queue preparation and clock polling in Electron's main
 // process. Minimizing the renderer never parks the receiver's queue worker.
@@ -62,6 +62,7 @@ class UpnpController extends EventEmitter {
     })
   }
   async apply(want, revision) {
+    if (this.ownershipUncertain && !want.reload) { this.publish(); return }
     const epoch = this.epoch
     const fresh = () => revision === this.revision && epoch === this.epoch
     const item = await this.prepare(want.current)
@@ -154,12 +155,42 @@ class UpnpController extends EventEmitter {
       const [position, transport] = await Promise.all([this.av('GetPositionInfo'), this.av('GetTransportInfo')])
       if (epoch !== this.epoch || revision !== this.revision || controls !== this.controls || this.syncing) return
       this.failures = 0
+      if (/^Receiver unreachable:/.test(this.error || '')) this.error = null
       const uri = value(position, 'TrackURI')
-      const item = this.entries.find(e => e.url === uri)
-      if (uri && !item) {
-        // Another controller took ownership. Never overwrite its queue.
-        this.end('stopped'); return
+      const metadata = value(position, 'TrackMetaData')
+      const resources = []
+      try { for (const res of nodes(parseXml(metadata), 'res')) resources.push(res.text) } catch {}
+      const identity = reference => {
+        try {
+          const url = new URL(reference)
+          const parts = url.pathname.split('/').map(part => decodeURIComponent(part))
+          // Lokal's media server identifies a resource by token/key, not the
+          // optional display filename (receivers may encode that differently).
+          const path = /^[a-f0-9]{32}$/i.test(parts[1] || '') && /^[a-f0-9]{24}$/i.test(parts[2] || '')
+            ? parts.slice(0, 3).join('/') : parts.join('/')
+          return url.origin + path + url.search
+        } catch { return reference }
       }
+      const owned = reference => this.entries.find(e => identity(e.url) === identity(reference))
+      const item = owned(uri) || resources.map(owned).find(Boolean)
+      if (!item && uri) {
+        const media = await this.av('GetMediaInfo')
+        if (epoch !== this.epoch || revision !== this.revision || controls !== this.controls) return
+        const currentUri = value(media, 'CurrentURI')
+        // An unfamiliar TrackURI alone is inconclusive. Require a consistent
+        // transport source and independent metadata resource before takeover.
+        const external = currentUri && !owned(currentUri) &&
+          !currentUri.startsWith('x-rincon-queue:') &&
+          identity(currentUri) === identity(uri) &&
+          resources.some(reference => identity(reference) === identity(currentUri))
+        if (external) { this.end('stopped'); return }
+        this.ownershipUncertain = true
+        this.error = 'Receiver item could not be identified. Reconnect before changing its queue.'
+        this.publish(); return
+      }
+      if (!item) return
+      this.ownershipUncertain = false
+      if (/^Receiver item could not be identified/.test(this.error || '')) this.error = null
       const state = value(transport, 'CurrentTransportState')
       const previous = this.playerState
       if (item) this.current = item
@@ -194,7 +225,7 @@ class UpnpController extends EventEmitter {
     this.revision++
     await this.serial
     // A failed Stop must not authorize local autoplay or a second receiver.
-    try { if (stopReceiver && this.device) await this.av('Stop') }
+    try { if (stopReceiver && this.device && (this.current || this.queueOwned)) await this.av('Stop') }
     catch (error) { this.stopping = false; throw error }
     this.cleanup(); this.state = 'idle'; this.publish(); return last
   }

@@ -224,5 +224,12 @@ async function probeAddress(host, { fetchImpl = (...args) => fetch(...args), tim
   return { id: `ip:${address}`, name, model, host: address, port: 8009, kind: 'tv' }
 }
 
-module.exports = { CastDiscovery, absorb, deviceOf, kindOf, txtMap, probeAddress, SERVICE, CAN }
+function mergeDevices(saved, live) {
+  const all = new Map(saved.map(device => [device.id, device]))
+  for (const device of live) all.set(device.id, { ...all.get(device.id), ...device })
+  const order = { tv: 0, speaker: 1, group: 2 }
+  return [...all.values()].sort((a, b) => (order[a.kind] ?? 3) - (order[b.kind] ?? 3) || a.name.localeCompare(b.name))
+}
+
+module.exports = { mergeDevices, CastDiscovery, absorb, deviceOf, kindOf, txtMap, probeAddress, SERVICE, CAN }
 

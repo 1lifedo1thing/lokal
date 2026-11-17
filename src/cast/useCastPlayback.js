@@ -354,7 +354,7 @@ export function useCastPlayback(helpers) {
       },
     }
 
-    const activate = ({ joined }) => {
+    const activate = ({ joined, paused = false }) => {
       const status = cast().status || {}
       const state = player()
       // Moving to another device while casting: the new one takes over from
@@ -365,7 +365,7 @@ export function useCastPlayback(helpers) {
       live.device = status.device || null
       live.localVolume = switching ? switching.localVolume : state.volume
       let position = switching ? castPosition(switching.anchor, Date.now(), Number(state.duration) || 0) : state.progress || 0
-      let play = !!state.isPlaying
+      let play = !paused && !!state.isPlaying
       // This computer goes quiet (App.jsx parks its audio) before anything else moves.
       usePlayerStore.setState({ castActive: true })
       call('stopTimer')

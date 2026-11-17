@@ -6,7 +6,7 @@
 //   cast_quality   "max" (FLAC up to 24-bit / 96 kHz) or "standard" (16 / 48)
 //   cast_devices   devices added by their address (JSON)
 
-const { CastDiscovery, probeAddress } = require('../cast/discovery')
+const { CastDiscovery, probeAddress, mergeDevices } = require('../cast/discovery')
 const { CastController } = require('../cast/controller')
 const { createCastMediaServer } = require('../cast/mediaServer')
 const { createCastMedia } = require('../cast/media')
@@ -48,7 +48,7 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
       for (const device of JSON.parse(settings(getDB).cast_devices || '[]')) discovery.addManual(device)
     } catch {}
     upnpDiscovery = new UpnpDiscovery({ log })
-    const changed = () => send('cast:devices', [...discovery.list(), ...upnpDiscovery.list()])
+    const changed = () => send('cast:devices', mergeDevices(discovery.list(), upnpDiscovery.list()))
     discovery.on('change', changed)
     upnpDiscovery.on('change', changed)
     return discovery
@@ -94,6 +94,13 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
     return controller
   }
 
+  let outputSerial = Promise.resolve()
+  const serialized = work => (...args) => {
+    const run = outputSerial.then(() => work(...args))
+    outputSerial = run.catch(() => {})
+    return run
+  }
+
   const guard = work => async (...args) => {
     try { return await work(...args) } catch (error) { return { error: error?.message || String(error) } }
   }
@@ -103,7 +110,7 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
     const found = ensureDiscovery()
     found.scan(15000)
     upnpDiscovery.scan()
-    return [...found.list(), ...upnpDiscovery.list()]
+    return mergeDevices(found.list(), upnpDiscovery.list())
   })
   ipcMain.handle('cast:addDevice', guard(async (_, address) => {
     const device = await probeAddress(address)
@@ -118,22 +125,28 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
     saveSetting(getDB, 'cast_devices', JSON.stringify(saved))
     return { ok: true }
   }))
-  ipcMain.handle('cast:connect', guard(async (_, deviceId) => {
+  ipcMain.handle('cast:connect', guard(serialized(async (_, deviceId) => {
     ensureDiscovery()
-    const device = discovery.get(deviceId) || upnpDiscovery.get(deviceId)
+    const device = upnpDiscovery.get(deviceId) || discovery.get(deviceId)
     if (!device) throw new Error('That device is no longer on the network')
-    if (controller) {
-      await controller.disconnect({ stopReceiver: true })
-      controller.removeAllListeners()
-      controller = null
+    let previousStopped = true
+    const previous = controller
+    if (previous) {
+      try { await previous.disconnect({ stopReceiver: true }) }
+      catch {
+        await previous.disconnect({ stopReceiver: false })
+        previousStopped = false
+      }
+      previous.removeAllListeners()
+      if (controller === previous) controller = null
     }
     const session = ensureController(device.backend)
     session.appId = appIdFrom()
     const result = await session.connect(device)
     saveSetting(getDB, 'cast_last_device', device.id)
-    return { ...result, status: session.status() }
-  }))
-  ipcMain.handle('cast:disconnect', guard(async (_, options) => (controller ? controller.disconnect(options || {}) : null)))
+    return { ...result, previousStopped, status: session.status() }
+  })))
+  ipcMain.handle('cast:disconnect', guard(serialized(async (_, options) => (controller ? controller.disconnect(options || {}) : null))))
   ipcMain.handle('cast:status', () => (controller ? controller.status() : { state: 'idle' }))
   ipcMain.handle('cast:setWindow', guard(async (_, window) => { await ensureController().setWindow(window); return { ok: true } }))
   ipcMain.handle('cast:command', guard(async (_, command) => {
