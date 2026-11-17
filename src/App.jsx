@@ -82,6 +82,7 @@ import ReleaseRefreshBanner from './components/ReleaseRefreshBanner'
 import { PageReadyContext, PageShownContext, PAGE_READY_TIMEOUT_MS } from './pageCache'
 import { audioSrcFor, isAddonProvider, providerLabel, streamRef } from './onlineTracks'
 import { beginAtmosOutputRelease, awaitAtmosOutputRelease } from './audio/atmosHandoff.mjs'
+import { openAddonVerification } from './audio/addonVerification.mjs'
 import { addonPlaybackOutputKey } from './audio/addonPlaybackOutputKey.mjs'
 import { playbackLog } from './playbackLog'
 import TvController from './tv/TvController'
@@ -2130,6 +2131,26 @@ export default function App() {
     }
   }, [setIsPlaying])
 
+  const startAddonVerification = useCallback(() => openAddonVerification(
+    addonVerificationRetryRef.current, {
+      getPending: () => addonVerificationRetryRef.current,
+      verify: key => api.addonsPackages({ action: 'package.verify', key }),
+      complete: completeAddonVerification,
+      changed: () => window.dispatchEvent(new Event('lokal:addons-changed')),
+      setBusy: setAddonVerificationBusy,
+      setMessage: setAddonVerificationMessage,
+    },
+  ), [completeAddonVerification])
+
+  // Both selected recommendations and interrupted streams open verification
+  // directly. Mark the pending request synchronously to avoid StrictMode repeats.
+  useEffect(() => {
+    const pending = addonVerificationRetryRef.current
+    if (addonVerificationPrompt && pending && !pending.verificationStarted) {
+      void startAddonVerification()
+    }
+  }, [addonVerificationPrompt, startAddonVerification])
+
   const dismissAddonVerificationPrompt = useCallback(() => {
     const pending = addonVerificationRetryRef.current
     addonVerificationRetryRef.current = null
@@ -3788,7 +3809,7 @@ export default function App() {
             <Toaster />
             <StreamLoadingToast />
             <AnimatePresence>
-              {addonVerificationPrompt && (
+              {addonVerificationPrompt && addonVerificationMessage && (
                 <motion.div
                   className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4"
                   initial={{ opacity: 0 }}
@@ -3818,25 +3839,7 @@ export default function App() {
                       >{t('Not now')}</button>
                       <button
                         disabled={addonVerificationBusy}
-                        onClick={async () => {
-                          setAddonVerificationBusy(true)
-                          setAddonVerificationMessage('')
-                          try {
-                            const result = await api.addonsPackages({ action: 'package.verify', key: addonVerificationPrompt.key })
-                            if (result?.authenticated) {
-                              window.dispatchEvent(new Event('lokal:addons-changed'))
-                              await completeAddonVerification(addonVerificationPrompt.key)
-                            } else if (result?.opened) {
-                              setAddonVerificationMessage('Complete verification in the browser window that opened. Lokal will start the selected song automatically when access is confirmed.')
-                            } else {
-                              setAddonVerificationMessage(result?.error || "Verification couldn't be started. Open Settings → Addons to verify this provider.")
-                            }
-                          } catch (error) {
-                            setAddonVerificationMessage(error?.message || "Verification couldn't be started. Open Settings → Addons to verify this provider.")
-                          } finally {
-                            setAddonVerificationBusy(false)
-                          }
-                        }}
+                        onClick={() => void startAddonVerification()}
                         className="rounded-lg bg-accent px-3 py-2 text-sm text-base disabled:opacity-50"
                       >{addonVerificationBusy ? t('Opening…') : t('Verify access')}</button>
                     </div>
