@@ -516,7 +516,7 @@ export default function TrackList({ tracks = [], showQuality = false, onRemove =
       setGhostTrack(track)
       return
     }
-    if (resolveTracks || isMobileLinkedTrack(track)) {
+    if (resolveTracks || ((isPlayable(track) || isMobileLinkedTrack(track)) && mergedTracks.some(isMobileLinkedTrack))) {
       if (currentTrack?.id === track.id) togglePlay()
       else playResolved(mergedTracks, track)
       return
