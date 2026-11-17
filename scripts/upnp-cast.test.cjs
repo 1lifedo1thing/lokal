@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { parseXml, value, didl } = require('../electron/cast/upnpXml')
+const { parseXml, value, didl, escapeXml } = require('../electron/cast/upnpXml')
 const { describe, coordinator, soap, timestamp, seconds, UpnpDiscovery } = require('../electron/cast/upnp')
 const { UpnpController } = require('../electron/cast/upnpController')
 const response = inner => ({ ok: true, status: 200, text: async () => `<s:Envelope xmlns:s="soap"><s:Body>${inner}</s:Body></s:Envelope>` })
@@ -95,4 +95,16 @@ test('unrelated external playback relinquishes ownership without stopping that m
 })
 test('clock handles hours, invalid durations and negative seeks', () => {
   assert.equal(seconds('01:02:03'), 3723); assert.equal(seconds('NOT_IMPLEMENTED'), 0); assert.equal(timestamp(-5), '00:00:00')
+})
+test('selecting a grouped Sonos room targets its current coordinator without regrouping', async () => {
+  const selected = { ...device(true), uuid: 'MEMBER', services: { ...device(true).services, ZoneGroupTopology: svc('ZoneGroupTopology') } }
+  const topology = '<ZoneGroups><ZoneGroup Coordinator="MASTER"><ZoneGroupMember UUID="MEMBER" Location="http://192.168.1.20/device.xml"/><ZoneGroupMember UUID="MASTER" Location="http://192.168.1.30/device.xml"/></ZoneGroup></ZoneGroups>'
+  const calls = []
+  const master = await coordinator(selected, async (url, options) => {
+    calls.push({ url, options })
+    if (options.method === 'POST') return response(`<ZoneGroupState>${escapeXml(topology)}</ZoneGroupState>`)
+    return response('<device><deviceType>urn:schemas-upnp-org:device:ZonePlayer:1</deviceType><manufacturer>Sonos</manufacturer><UDN>uuid:MASTER</UDN><friendlyName>Living room</friendlyName><serviceList><service><serviceType>urn:schemas-upnp-org:service:AVTransport:1</serviceType><controlURL>/av</controlURL></service></serviceList></device>')
+  })
+  assert.equal(master.id, selected.id); assert.equal(master.uuid, 'MASTER'); assert.equal(master.host, '192.168.1.30'); assert.equal(master.kind, 'group')
+  assert.equal(calls.filter(c => c.options.method === 'POST').length, 1)
 })
