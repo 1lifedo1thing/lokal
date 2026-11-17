@@ -79,6 +79,7 @@ async function main() {
     size, bytes: await sharp(circular).resize(size).png().toBuffer(),
   })))
   await fs.writeFile(path.join(target, 'lokal-icon.ico'), ico(pngs))
+  await require('./generate-installer-assets.cjs').main()
   console.log('[branding] circular CD, transparent corners, sticker mask and ICO updated')
 }
 

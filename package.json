@@ -51,7 +51,9 @@
     "test:fullscreen-visualizer-settings": "node --test scripts/fullscreen-visualizer-settings.test.mjs",
     "test:fullscreen-appearance": "node --test scripts/fullscreen-appearance.test.mjs scripts/fullscreen-lyrics-layout.test.mjs",
     "gen:icons": "node scripts/generate-brand-icons.cjs",
-    "test:brand-icons": "node --test scripts/brand-icons.test.cjs"
+    "test:brand-icons": "node --test scripts/brand-icons.test.cjs",
+    "gen:installer": "node scripts/generate-installer-assets.cjs",
+    "test:installer": "node --test scripts/installer-assets.test.cjs"
   },
   "build": {
     "appId": "com.lokal.music",
@@ -184,6 +186,40 @@
       ],
       "category": "Music",
       "maintainer": "sipbuu <97703296+sipbuu@users.noreply.github.com>"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "runAfterFinish": true,
+      "installerIcon": "public/lokal-icon.ico",
+      "uninstallerIcon": "public/lokal-icon.ico",
+      "installerHeader": "build/installer/generated/header.bmp",
+      "installerSidebar": "build/installer/generated/sidebar.bmp",
+      "uninstallerSidebar": "build/installer/generated/sidebar.bmp",
+      "include": "build/installer/installer.nsh"
+    },
+    "dmg": {
+      "background": "build/installer/generated/dmg.png",
+      "window": {
+        "width": 660,
+        "height": 440
+      },
+      "iconSize": 80,
+      "iconTextSize": 12,
+      "contents": [
+        {
+          "x": 175,
+          "y": 235
+        },
+        {
+          "x": 485,
+          "y": 235,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     }
   },
   "dependencies": {

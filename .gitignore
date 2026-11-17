@@ -26,3 +26,6 @@ native/smtc-bridge/target/
 native/audio-output/build/
 build/webview2-signin/
 __pycache__/
+
+# Rebuilt offline from the installer SVG masters by gen:icons
+build/installer/generated/
