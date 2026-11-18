@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url)
 const { planFile, targetRate, convertArgs, family } = require('../electron/cast/formats.js')
 const { createCastMediaServer, localAddressFor, parseRange } = require('../electron/cast/mediaServer.js')
 const { createCastMedia } = require('../electron/cast/media.js')
+const { didl, parseXml, value } = require('../electron/cast/upnpXml.js')
 
 test('what goes to the TV as it is, and what is converted (and to what)', () => {
   const direct = info => planFile(info).action
@@ -115,6 +116,38 @@ test('a file the TV can\'t play is converted once (the second time comes from th
   assert.ok(runs[0].includes('flac'))
   const res = await fetch(second.url.replace(/^http:\/\/[^/]+/, `http://127.0.0.1:${server.port}`))
   assert.equal(await res.text(), 'flac-bytes')
+})
+
+test('Sonos can fetch a JPEG when a queue entry is missing its library WebP cover', async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lokal-cast-cover-'))
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }))
+  const song = path.join(dir, 'song.mp3')
+  const cover = path.join(dir, 'cover.webp')
+  fs.writeFileSync(song, 'audio')
+  const sharp = require('sharp')
+  await sharp({ create: { width: 16, height: 16, channels: 3, background: '#229944' } })
+    .webp().toFile(cover)
+
+  const server = createCastMediaServer()
+  await server.start()
+  t.after(() => server.stop())
+  const media = createCastMedia({
+    server,
+    trackRow: id => ({ id, file_path: song, codec: 'MPEG 1 Layer 3', artwork_path: cover }),
+  })
+  const prepared = await media.prepare({ id: 'local', artwork_path: null }, { deviceHost: '127.0.0.1', receiver: 'sonos' })
+  const url = value(parseXml(didl(prepared)), 'albumArtURI')
+  assert.match(url, /\/cover\.jpg$/)
+  const head = await fetch(url, { method: 'HEAD' })
+  assert.equal(head.headers.get('content-type'), 'image/jpeg')
+  const response = await fetch(url)
+  assert.equal(response.status, 200)
+  const jpeg = Buffer.from(await response.arrayBuffer())
+  assert.equal(jpeg.length, Number(head.headers.get('content-length')))
+  assert.equal((await sharp(jpeg).metadata()).format, 'jpeg')
+
+  media.release(prepared)
+  assert.equal((await fetch(url)).status, 404)
 })
 
 test('converted songs the TV still holds are kept when the cache is trimmed', async t => {

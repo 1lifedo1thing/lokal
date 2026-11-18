@@ -14,8 +14,6 @@ const fs = require('fs')
 const path = require('path')
 const { planFile, convertArgs, streamMime } = require('./formats')
 
-const IMAGE_MIME = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' }
-
 function runFfmpeg(ffmpeg, args, { timeoutMs = 10 * 60 * 1000, spawn = require('child_process').spawn } = {}) {
   return new Promise((resolve, reject) => {
     let err = ''
@@ -86,13 +84,16 @@ function createCastMedia({
     return path.join(dir, key + plan.ext)
   }
 
-  function artworkFor(row, deviceHost) {
-    if (row.artwork_path && fs.existsSync(row.artwork_path)) {
-      const mime = IMAGE_MIME[path.extname(row.artwork_path).toLowerCase()] || 'image/jpeg'
-      const added = server.add({ kind: 'file', path: row.artwork_path, mime }, 'cover' + (path.extname(row.artwork_path) || '.jpg'))
+  function artworkFor(track, libraryTrack, deviceHost) {
+    // A queue entry may have been saved before its library cover was written.
+    for (const file of [track.artwork_path, libraryTrack.artwork_path]) {
+      if (!file || !fs.existsSync(file)) continue
+      const added = server.add({ kind: 'artwork', path: file }, 'cover.jpg')
       return { url: server.urlFor(added.path, deviceHost), key: added.key }
     }
-    if (/^https?:\/\//i.test(String(row.artwork_url || ''))) return { url: row.artwork_url, key: null }
+    for (const url of [track.artwork_url, libraryTrack.artwork_url]) {
+      if (/^https?:\/\//i.test(String(url || ''))) return { url, key: null }
+    }
     return { url: null, key: null }
   }
 
@@ -102,7 +103,8 @@ function createCastMedia({
    * @returns { trackId, url, mime, duration, metadata, keys, converted }
    */
   async function prepare(track, { deviceHost, convert: forceConvert = false, receiver = 'chromecast' } = {}) {
-    const row = { ...(trackRow(track?.id) || {}), ...track }
+    const libraryTrack = trackRow(track?.id) || {}
+    const row = { ...libraryTrack, ...track }
     if (!row?.id) throw new Error('Nothing to play')
     const keys = []
     const files = [] // converted files it plays from (kept by the cache while in use)
@@ -167,7 +169,7 @@ function createCastMedia({
         converted = true
       }
     }
-    const art = artworkFor(row, deviceHost)
+    const art = artworkFor(track, libraryTrack, deviceHost)
     if (art.key) keys.push(art.key)
     return {
       trackId: String(row.id),
@@ -199,8 +201,7 @@ function createCastMedia({
 
   /** A song's cover for Lokal's receiver (its Up Next row): { url, key } (key: to take it down). */
   function artwork(track, { deviceHost } = {}) {
-    const row = { ...(trackRow(track?.id) || {}), ...track }
-    return artworkFor(row, deviceHost)
+    return artworkFor(track || {}, trackRow(track?.id) || {}, deviceHost)
   }
 
   return { prepare, release, artwork, unpublish: key => { if (key) server.remove(key) } }
