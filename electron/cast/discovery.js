@@ -207,6 +207,10 @@ class CastDiscovery extends EventEmitter {
 async function probeAddress(host, { fetchImpl = (...args) => fetch(...args), timeoutMs = 2500 } = {}) {
   const address = String(host || '').trim()
   if (!/^(\d{1,3}\.){3}\d{1,3}$/.test(address)) throw new Error('Enter the device\'s IP address, like 192.168.1.40')
+  try {
+    const sonos = await require('./upnp').describe(`http://${address}:1400/xml/device_description.xml`, fetchImpl)
+    if (sonos) return sonos
+  } catch {}
   let name = address
   let model = ''
   const controller = new AbortController()
@@ -220,4 +224,12 @@ async function probeAddress(host, { fetchImpl = (...args) => fetch(...args), tim
   return { id: `ip:${address}`, name, model, host: address, port: 8009, kind: 'tv' }
 }
 
-module.exports = { CastDiscovery, absorb, deviceOf, kindOf, txtMap, probeAddress, SERVICE, CAN }
+function mergeDevices(saved, live) {
+  const all = new Map(saved.map(device => [device.id, device]))
+  for (const device of live) all.set(device.id, { ...all.get(device.id), ...device })
+  const order = { tv: 0, speaker: 1, group: 2 }
+  return [...all.values()].sort((a, b) => (order[a.kind] ?? 3) - (order[b.kind] ?? 3) || a.name.localeCompare(b.name))
+}
+
+module.exports = { mergeDevices, CastDiscovery, absorb, deviceOf, kindOf, txtMap, probeAddress, SERVICE, CAN }
+

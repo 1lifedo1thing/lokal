@@ -101,7 +101,7 @@ function createCastMedia({
    * @param options { deviceHost, convert: true to convert even what could be relayed (a retry) }
    * @returns { trackId, url, mime, duration, metadata, keys, converted }
    */
-  async function prepare(track, { deviceHost, convert: forceConvert = false } = {}) {
+  async function prepare(track, { deviceHost, convert: forceConvert = false, receiver = 'chromecast' } = {}) {
     const row = { ...(trackRow(track?.id) || {}), ...track }
     if (!row?.id) throw new Error('Nothing to play')
     const keys = []
@@ -111,9 +111,9 @@ function createCastMedia({
     let converted = false
     const ref = streamRef(row)
     if (ref) {
-      if (forceConvert) {
+      if (forceConvert || receiver === 'sonos') {
         const stream = await resolveStream(ref.provider, ref.id)
-        const plan = { action: 'convert', to: 'flac', ext: '.flac', mime: 'audio/flac', rate: null, depth: 24 }
+        const plan = { action: 'convert', to: 'flac', ext: '.flac', mime: 'audio/flac', rate: receiver === 'sonos' ? 48000 : null, depth: receiver === 'sonos' ? 16 : 24 }
         // Lossy sources stay lossy: AAC is plenty for what YouTube or SoundCloud send.
         if (!/flac|wav|alac/i.test(String(stream.mime || ''))) Object.assign(plan, { to: 'aac', ext: '.m4a', mime: 'audio/mp4', depth: null })
         const dest = cachePath(`${ref.provider}:${ref.id}`, plan)
@@ -141,7 +141,11 @@ function createCastMedia({
       if (!file || file.startsWith('ghost://') || !fs.existsSync(file)) throw new Error('This song has no file to play')
       let info = { file, codec: row.codec, sampleRate: row.sample_rate, bitDepth: row.bit_depth, lossless: row.lossless }
       if (!info.codec) info = { ...info, ...(await probe(file).catch(() => null) || {}) }
-      let plan = planFile(info, quality())
+      let plan = planFile(info, receiver === 'sonos' ? 'standard' : quality())
+      // Sonos models differ; use a conservative 16/48 FLAC fallback for
+      // containers outside the common MP3/AAC/FLAC/WAV set.
+      if (receiver === 'sonos' && /opus|ogg|webm/.test(plan.mime || ''))
+        plan = { action: 'convert', to: 'flac', ext: '.flac', mime: 'audio/flac', rate: 48000, depth: 16 }
       if (forceConvert && plan.action === 'direct') plan = { ...planFile({ ...info, codec: 'ALAC' }, quality()), to: info.lossless || /flac|pcm|wav/i.test(String(info.codec)) ? 'flac' : 'aac' }
       if (plan.action === 'direct') {
         const added = server.add({ kind: 'file', path: file, mime: plan.mime }, 'song' + path.extname(file).toLowerCase())
@@ -203,3 +207,4 @@ function createCastMedia({
 }
 
 module.exports = { createCastMedia, runFfmpeg }
+
