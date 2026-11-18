@@ -1,5 +1,5 @@
 const { EventEmitter } = require('events')
-const { escapeXml, parseXml, nodes, value, didl } = require('./upnpXml')
+const { escapeXml, parseXml, nodes, value, timestamp } = require('./upnpXml')
 const TYPES = ['urn:schemas-upnp-org:device:MediaRenderer:1', 'urn:schemas-upnp-org:device:ZonePlayer:1']
 const AV = 'urn:schemas-upnp-org:service:AVTransport:1'
 const RC = 'urn:schemas-upnp-org:service:RenderingControl:1'
@@ -99,5 +99,4 @@ class UpnpDiscovery extends EventEmitter {
   stop() { clearTimeout(this.timer); try { this.socket?.close() } catch {} this.socket = null }
 }
 const seconds = time => { const p = String(time).split(':').map(Number); return p.length === 3 && p.every(Number.isFinite) ? p[0] * 3600 + p[1] * 60 + p[2] : 0 }
-const timestamp = seconds => { const n = Math.max(0, Math.floor(Number(seconds) || 0)); return [Math.floor(n / 3600), Math.floor(n / 60) % 60, n % 60].map(x => String(x).padStart(2, '0')).join(':') }
 module.exports = { UpnpDiscovery, describe, coordinator, soap, AV, RC, GROUP_RC, seconds, timestamp, TYPES }

@@ -10,6 +10,7 @@ class UpnpController extends EventEmitter {
     this.state = 'idle'; this.entries = []; this.prepared = new Map(); this.revision = 0; this.epoch = 0; this.serial = Promise.resolve()
     this.position = 0; this.playerState = 'IDLE'; this.volume = { level: 1, muted: false }
     this.controls = 0
+    this.sonosQueueId = 0
   }
   status() {
     return { state: this.state, device: this.device, receiver: this.device?.sonos ? 'sonos' : 'dlna', trackId: this.current?.trackId || null,
@@ -138,7 +139,10 @@ class UpnpController extends EventEmitter {
     this.error = null; this.publish()
   }
   async add(item) {
-    await this.av('AddURIToQueue', { EnqueuedURI: item.url, EnqueuedURIMetaData: didl(item), DesiredFirstTrackNumberEnqueued: 0, EnqueueAsNext: 0 })
+    // The same recording can appear twice. Sonos expects a distinct DIDL ID
+    // for each queue entry so the app can associate its metadata and cover.
+    const metadata = didl(item, { sonosQueueId: ++this.sonosQueueId })
+    await this.av('AddURIToQueue', { EnqueuedURI: item.url, EnqueuedURIMetaData: metadata, DesiredFirstTrackNumberEnqueued: 0, EnqueueAsNext: 0 })
     this.entries.push(item)
   }
   async readVolume() {
