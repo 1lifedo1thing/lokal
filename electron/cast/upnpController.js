@@ -46,7 +46,7 @@ class UpnpController extends EventEmitter {
       item = await Promise.race([work, new Promise((_, reject) => { timer = setTimeout(() => { expired = true; reject(new Error('Receiver source preparation timed out')) }, 20000) })])
     } finally { clearTimeout(timer) }
     if (epoch !== this.epoch) { this.media.release(item); throw new Error('Output changed while preparing audio') }
-    if (this.device.sonos && item.converted === false) {
+    if (this.device.sonos && (item.converted === false || item.embeddedCover)) {
       const url = await speakerArtwork(this.device.services.AVTransport.url, item.url, this.fetch)
       if (epoch !== this.epoch) { this.media.release(item); throw new Error('Output changed while preparing artwork') }
       if (url) item.metadata = { ...item.metadata, images: [{ url }] }

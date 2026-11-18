@@ -7,7 +7,7 @@ const response = inner => ({ ok: true, status: 200, text: async () => `<s:Envelo
 const svc = name => ({ url: `http://192.168.1.20/${name}`, type: `urn:schemas-upnp-org:service:${name}:1` })
 const device = sonos => ({ id: 'upnp:room', uuid: 'RINCON_20', name: 'Kitchen', host: '192.168.1.20', sonos,
   services: { AVTransport: svc('AVTransport'), RenderingControl: svc('RenderingControl'), ...(sonos ? { GroupRenderingControl: svc('GroupRenderingControl') } : {}) } })
-function fixture(sonos = true, converted) {
+function fixture(sonos = true, converted, embeddedCover) {
   const commands = []; const released = []; let uri = ''; let state = 'PLAYING'; let failStop = false; let metadata = ''; let currentUri = ''
   const fetchImpl = async (url, options) => {
     const action = options.headers.SOAPAction.match(/#([^" ]+)/)[1]
@@ -21,7 +21,7 @@ function fixture(sonos = true, converted) {
     if (/Get.*Mute/.test(action)) return response('<CurrentMute>0</CurrentMute>')
     return response('')
   }
-  const media = { prepare: async track => ({ trackId: String(track.id), url: `http://192.168.1.4/media/${track.id}`, duration: 180, converted,
+  const media = { prepare: async track => ({ trackId: String(track.id), url: `http://192.168.1.4/media/${track.id}`, duration: 180, converted, embeddedCover,
     mime: 'audio/flac', metadata: { title: `A & B <${track.id}>`, artist: 'Artist', albumName: 'Album', images: [{ url: 'http://192.168.1.4/art.jpg' }] } }), release: item => released.push(item) }
   const server = { start: async () => {}, stop: () => {} }
   const controller = new UpnpController({ media, server, fetchImpl })
@@ -78,8 +78,8 @@ test('repeated Sonos tracks get distinct numeric IDs in the actual queue request
   assert.deepEqual(metadata.map(doc => nodes(doc, 'item')[0].attrs.id), ['1', '2', '3'])
   assert.equal(value(metadata[0], 'res'), value(metadata[1], 'res'))
 })
-test('Sonos uses its own cover URL when supported and retains the sender cover otherwise', async t => {
-  const f = fixture(true, false)
+test('Sonos uses its own cover URL for converted audio with an embedded image', async t => {
+  const f = fixture(true, true, true)
   t.after(() => f.controller.cleanup())
   f.controller.fetch = async (url, options) => {
     if (options.method === 'POST') return f.fetchImpl(url, options)
