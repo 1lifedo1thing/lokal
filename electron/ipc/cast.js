@@ -125,34 +125,50 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
     saveSetting(getDB, 'cast_devices', JSON.stringify(saved))
     return { ok: true }
   }))
+  let previousStopUnconfirmed = false
   ipcMain.handle('cast:connect', guard(serialized(async (_, deviceId) => {
     ensureDiscovery()
     const device = upnpDiscovery.get(deviceId) || discovery.get(deviceId)
     if (!device) throw new Error('That device is no longer on the network')
-    let previousStopped = true
     const previous = controller
     if (previous) {
       try { await previous.disconnect({ stopReceiver: true }) }
       catch {
         await previous.disconnect({ stopReceiver: false })
-        previousStopped = false
+        previousStopUnconfirmed = true
       }
       previous.removeAllListeners()
       if (controller === previous) controller = null
     }
     const session = ensureController(device.backend)
     session.appId = appIdFrom()
-    const result = await session.connect(device)
-    if (!previousStopped && result.joined) await session.pause()
-    saveSetting(getDB, 'cast_last_device', device.id)
-    return { ...result, previousStopped, status: session.status() }
+    try {
+      const result = await session.connect(device)
+      if (previousStopUnconfirmed && result.joined) await session.pause()
+      saveSetting(getDB, 'cast_last_device', device.id)
+      return { ...result, previousStopped: !previousStopUnconfirmed, status: session.status() }
+    } catch (error) {
+      try { await session.disconnect({ stopReceiver: false }) } catch {}
+      session.removeAllListeners()
+      controller = null
+      throw error
+    }
   })))
-  ipcMain.handle('cast:disconnect', guard(serialized(async (_, options) => (controller ? controller.disconnect(options || {}) : null))))
+  ipcMain.handle('cast:disconnect', guard(serialized(async (_, options) => {
+    if (!controller) return null
+    if (options?.stopReceiver === false && controller.status().state === 'connected') {
+      previousStopUnconfirmed = true
+    }
+    return controller.disconnect(options || {})
+  })))
   ipcMain.handle('cast:status', () => (controller ? controller.status() : { state: 'idle' }))
   ipcMain.handle('cast:setWindow', guard(async (_, window) => { await ensureController().setWindow(window); return { ok: true } }))
   ipcMain.handle('cast:command', guard(async (_, command) => {
     const session = ensureController()
-    if (command?.type === 'play') await session.play()
+    if (command?.type === 'play') {
+      await session.play()
+      previousStopUnconfirmed = false
+    }
     else if (command?.type === 'pause') await session.pause()
     else if (command?.type === 'seek') await session.seek(command.position)
     else if (command?.type === 'volume') await session.setVolume({ level: command.level })

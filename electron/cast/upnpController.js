@@ -62,7 +62,12 @@ class UpnpController extends EventEmitter {
     })
   }
   async apply(want, revision) {
-    if (this.ownershipUncertain && !want.reload) { this.publish(); return }
+    if (this.ownershipUncertain && !want.reload) {
+      this.deferredWindow = { window: want, trackId: this.current?.trackId }
+      this.publish()
+      return
+    }
+    this.deferredWindow = null
     const epoch = this.epoch
     const fresh = () => revision === this.revision && epoch === this.epoch
     const item = await this.prepare(want.current)
@@ -183,7 +188,24 @@ class UpnpController extends EventEmitter {
           !currentUri.startsWith('x-rincon-queue:') &&
           identity(currentUri) === identity(uri) &&
           resources.some(reference => identity(reference) === identity(currentUri))
-        if (external) { this.end('stopped'); return }
+        let queueTakeover = false
+        const directory = this.device.services.ContentDirectory
+        const trackNumber = Number(value(position, 'Track'))
+        if (this.queueOwned && directory && currentUri === 'x-rincon-queue:' + this.device.uuid + '#0' &&
+            Number.isInteger(trackNumber) && trackNumber > 0 &&
+            resources.some(reference => identity(reference) === identity(uri))) {
+          const browse = await soap(directory.url, directory.type, 'Browse', {
+            ObjectID: 'Q:0', BrowseFlag: 'BrowseDirectChildren', Filter: 'res',
+            StartingIndex: trackNumber - 1, RequestedCount: 1, SortCriteria: '',
+          }, this.fetch).catch(() => null)
+          if (epoch !== this.epoch || revision !== this.revision || controls !== this.controls || this.syncing) return
+          const result = browse && value(browse, 'Result')
+          try {
+            queueTakeover = !!result && nodes(parseXml(result), 'res')
+              .some(res => identity(res.text) === identity(uri))
+          } catch {}
+        }
+        if (external || queueTakeover) { this.end('stopped'); return }
         this.ownershipUncertain = true
         this.error = 'Receiver item could not be identified. Reconnect before changing its queue.'
         this.publish(); return
@@ -197,8 +219,14 @@ class UpnpController extends EventEmitter {
       this.position = seconds(value(position, 'RelTime')); this.positionAt = Date.now()
       this.playerState = state === 'PLAYING' ? 'PLAYING' : state === 'TRANSITIONING' ? 'BUFFERING' : state === 'PAUSED_PLAYBACK' ? 'PAUSED' : 'IDLE'
       await this.readVolume().catch(() => {})
-      if (epoch !== this.epoch || controls !== this.controls) return
+      if (epoch !== this.epoch || revision !== this.revision || controls !== this.controls) return
       this.publish()
+      const deferred = this.deferredWindow
+      this.deferredWindow = null
+      if (deferred && (String(deferred.window.current.id) !== String(deferred.trackId) ||
+          String(deferred.trackId) === String(this.current.trackId))) {
+        this.setWindow(deferred.window).catch(error => this.log(error.message))
+      }
       // STOP alone is not completion: require a last-seconds observation.
       if (state === 'STOPPED' && previous === 'PLAYING' && this.lastDuration > 0 && this.lastPosition >= this.lastDuration - 3 && !this.stopping && this.finishedFor !== this.current.trackId) {
         this.finishedFor = this.current.trackId; this.emit('finished')
@@ -230,7 +258,7 @@ class UpnpController extends EventEmitter {
     this.cleanup(); this.state = 'idle'; this.publish(); return last
   }
   end(reason) { const last = this.status(); this.cleanup(); this.state = 'idle'; this.publish(); this.emit('ended', { reason, last }) }
-  cleanup() { this.epoch++; this.revision++; clearInterval(this.pollTimer); this.current = null; this.entries = []; for (const p of this.prepared.values()) this.media.release(p); this.prepared.clear(); this.server.stop(); this.device = null }
+  cleanup() { this.epoch++; this.revision++; clearInterval(this.pollTimer); this.current = null; this.deferredWindow = null; this.entries = []; for (const p of this.prepared.values()) this.media.release(p); this.prepared.clear(); this.server.stop(); this.device = null }
   sendCustom() { return false }
   sendUpNext() { return false }
   sendVideo() { return false }

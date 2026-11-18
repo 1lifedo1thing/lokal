@@ -162,3 +162,46 @@ test('live discovery wins over stale manual addresses without duplicating device
   assert.equal(found.length, 2); assert.equal(found[0].id, 'tv')
   assert.equal(found[1].host, '192.168.1.50'); assert.equal(found[1].manual, true)
 })
+
+test('the latest queue edit applies when the current speaker item becomes identifiable again', async t => {
+  const f = fixture(); t.after(() => f.controller.cleanup()); await f.controller.connect(device(true))
+  const current = { id: 'a' }
+  await f.controller.setWindow({ current, upcoming: [{ id: 'b' }] })
+  f.setUri('x-rincon-queue:RINCON_20#0'); await f.controller.poll()
+  await f.controller.setWindow({ current, upcoming: [{ id: 'c' }] })
+  await f.controller.setWindow({ current, upcoming: [{ id: 'd' }] })
+  assert.deepEqual(f.controller.entries.map(item => item.trackId), ['a', 'b'])
+  f.setUri('http://192.168.1.4/media/a'); await f.controller.poll()
+  await f.controller.serial
+  assert.deepEqual(f.controller.entries.map(item => item.trackId), ['a', 'd'])
+})
+
+test('a browsed external Sonos queue item relinquishes ownership without sending Stop', async t => {
+  const f = fixture(); t.after(() => f.controller.cleanup())
+  const receiver = device(true)
+  receiver.services.ContentDirectory = svc('ContentDirectory')
+  await f.controller.connect(receiver)
+  await f.controller.setWindow({ current: { id: 'a' }, upcoming: [] })
+  const external = 'http://other-controller/music'
+  f.setExternal(external)
+  const metadata = escapeXml('<DIDL-Lite><item><res>' + external + '</res></item></DIDL-Lite>')
+  let browseResult = ''
+  f.controller.fetch = (url, options) => {
+    if (options.headers.SOAPAction.includes('GetMediaInfo')) return response('<CurrentURI>x-rincon-queue:RINCON_20#0</CurrentURI>')
+    if (options.headers.SOAPAction.includes('#Browse')) {
+      assert.equal(value(parseXml(options.body), 'ObjectID'), 'Q:0')
+      assert.equal(value(parseXml(options.body), 'StartingIndex'), '1')
+      return response('<Result>' + browseResult + '</Result>')
+    }
+    return f.fetchImpl(url, options)
+  }
+  const stops = f.commands.filter(c => c.action === 'Stop').length
+  let ended; f.controller.on('ended', event => { ended = event })
+  await f.controller.poll()
+  assert.equal(f.controller.ownershipUncertain, true)
+  assert.equal(ended, undefined)
+  browseResult = metadata
+  await f.controller.poll()
+  assert.equal(ended.reason, 'stopped')
+  assert.equal(f.commands.filter(c => c.action === 'Stop').length, stops)
+})
