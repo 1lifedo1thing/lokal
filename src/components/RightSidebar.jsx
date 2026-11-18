@@ -489,7 +489,7 @@ export default function RightSidebar() {
       </p>
       {canOpenContext ? (
         <button
-          onClick={() => navigateToContext(nav, playbackContext, currentTrack?.id)}
+          onClick={() => navigateToContext(nav, playbackContext, currentTrack?.id, currentTrack)}
           title={`Go to ${playbackContext.name}`}
           className={`mt-0.5 block max-w-full truncate text-xs hover:underline text-left ${fx ? 'text-white/85 hover:text-white' : 'text-accent'}`}>
           {playbackContext.name}
