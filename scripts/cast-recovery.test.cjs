@@ -44,3 +44,51 @@ test('switching from an unconfirmed receiver requests a paused destination sessi
   await store.getState().connect('speaker')
   assert.equal(store.getState().session.paused, true)
 })
+
+test('a failed switch detaches the old session and a retry stays paused after an unconfirmed Stop', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../electron/ipc/cast.js'), 'utf8')
+  const { EventEmitter } = require('node:events')
+  const events = []
+  const handlers = new Map()
+  const devices = new Map(['old', 'next'].map(id => [id, { id, backend: 'upnp' }]))
+  let nextAttempts = 0
+  class Discovery extends EventEmitter {
+    get(id) { return devices.get(id) }
+  }
+  class Controller extends EventEmitter {
+    status() { return { state: this.connected ? 'connected' : 'idle', device: this.device } }
+    async connect(device) {
+      this.device = device
+      if (device.id === 'next' && ++nextAttempts === 1) throw new Error('Receiver offline')
+      this.connected = true
+      return { joined: false }
+    }
+    async disconnect({ stopReceiver }) {
+      if (stopReceiver && this.device?.id === 'old') throw new Error('Stop not confirmed')
+      this.connected = false
+    }
+  }
+  const modules = {
+    '../cast/discovery': { CastDiscovery: Discovery },
+    '../cast/upnp': { UpnpDiscovery: Discovery },
+    '../cast/upnpController': { UpnpController: Controller },
+    '../cast/mediaServer': { createCastMediaServer: () => ({}) },
+    '../cast/media': { createCastMedia: () => ({}) },
+    './db': { getDB: () => ({ prepare: () => ({ all: () => [], run: () => {} }) }) },
+  }
+  const mod = { exports: {} }
+  new Function('require', 'module', source)(name => modules[name] || {}, mod)
+  mod.exports.registerCastHandlers({ handle: (name, handler) => handlers.set(name, handler) }, {
+    getWindow: () => ({
+      isDestroyed: () => false,
+      webContents: { send: (channel, payload) => events.push([channel, payload]) },
+    }),
+  })
+  const connect = id => handlers.get('cast:connect')(null, id)
+  assert.equal((await connect('old')).previousStopped, true)
+  assert.match((await connect('next')).error, /offline/)
+  assert.equal(events.find(([channel]) => channel === 'cast:ended')[1].reason, 'lost')
+  const retry = await connect('next')
+  assert.equal(retry.status.device.id, 'next')
+  assert.equal(retry.previousStopped, false)
+})

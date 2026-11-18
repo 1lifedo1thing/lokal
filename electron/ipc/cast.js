@@ -125,17 +125,18 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
     saveSetting(getDB, 'cast_devices', JSON.stringify(saved))
     return { ok: true }
   }))
-  let previousStopUnconfirmed = false
+  let previousStopUnconfirmed = null
   ipcMain.handle('cast:connect', guard(serialized(async (_, deviceId) => {
     ensureDiscovery()
     const device = upnpDiscovery.get(deviceId) || discovery.get(deviceId)
     if (!device) throw new Error('That device is no longer on the network')
     const previous = controller
+    const last = previous?.status()
     if (previous) {
       try { await previous.disconnect({ stopReceiver: true }) }
       catch {
+        previousStopUnconfirmed = {}
         await previous.disconnect({ stopReceiver: false })
-        previousStopUnconfirmed = true
       }
       previous.removeAllListeners()
       if (controller === previous) controller = null
@@ -151,13 +152,14 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
       try { await session.disconnect({ stopReceiver: false }) } catch {}
       session.removeAllListeners()
       controller = null
+      if (last?.state === 'connected') send('cast:ended', { reason: 'lost', last })
       throw error
     }
   })))
   ipcMain.handle('cast:disconnect', guard(serialized(async (_, options) => {
     if (!controller) return null
     if (options?.stopReceiver === false && controller.status().state === 'connected') {
-      previousStopUnconfirmed = true
+      previousStopUnconfirmed = {}
     }
     return controller.disconnect(options || {})
   })))
@@ -166,10 +168,12 @@ function registerCastHandlers(ipcMain, { getWindow, powerSaveBlocker }) {
   ipcMain.handle('cast:command', guard(async (_, command) => {
     const session = ensureController()
     if (command?.type === 'play') {
+      const unconfirmed = previousStopUnconfirmed
       await session.play()
-      previousStopUnconfirmed = false
-    }
-    else if (command?.type === 'pause') await session.pause()
+      if (controller === session && previousStopUnconfirmed === unconfirmed) {
+        previousStopUnconfirmed = null
+      }
+    } else if (command?.type === 'pause') await session.pause()
     else if (command?.type === 'seek') await session.seek(command.position)
     else if (command?.type === 'volume') await session.setVolume({ level: command.level })
     else if (command?.type === 'mute') await session.setVolume({ muted: command.muted })
