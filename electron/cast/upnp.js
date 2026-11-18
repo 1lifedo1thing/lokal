@@ -33,6 +33,17 @@ async function soap(url, type, action, args = {}, fetchImpl = fetch) {
       `<u:${action} xmlns:u="${type}">` + Object.entries(args).map(([key, val]) => `<${key}>${escapeXml(val)}</${key}>`).join('') + `</u:${action}></s:Body></s:Envelope>`,
   }, fetchImpl)
 }
+async function speakerArtwork(controlUrl, mediaUrl, fetchImpl = fetch) {
+  try {
+    const url = new URL('/getaa', lanUrl(controlUrl))
+    url.searchParams.set('u', mediaUrl)
+    const response = await fetchImpl(url.href, { redirect: 'error', signal: AbortSignal.timeout(800) })
+    const type = response.headers.get('content-type')?.split(';')[0].trim().toLowerCase()
+    await response.body?.cancel()
+    if (response.status === 200 && ['image/jpeg', 'image/png'].includes(type)) return url.pathname + url.search
+  } catch {} // Missing embedded cover or unsupported extraction.
+  return null
+}
 async function describe(location, fetchImpl = fetch) {
   location = lanUrl(location)
   const doc = await request(location, {}, fetchImpl)
@@ -99,4 +110,4 @@ class UpnpDiscovery extends EventEmitter {
   stop() { clearTimeout(this.timer); try { this.socket?.close() } catch {} this.socket = null }
 }
 const seconds = time => { const p = String(time).split(':').map(Number); return p.length === 3 && p.every(Number.isFinite) ? p[0] * 3600 + p[1] * 60 + p[2] : 0 }
-module.exports = { UpnpDiscovery, describe, coordinator, soap, AV, RC, GROUP_RC, seconds, timestamp, TYPES }
+module.exports = { UpnpDiscovery, describe, coordinator, soap, speakerArtwork, AV, RC, GROUP_RC, seconds, timestamp, TYPES }
