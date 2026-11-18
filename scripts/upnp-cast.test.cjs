@@ -7,7 +7,7 @@ const response = inner => ({ ok: true, status: 200, text: async () => `<s:Envelo
 const svc = name => ({ url: `http://192.168.1.20/${name}`, type: `urn:schemas-upnp-org:service:${name}:1` })
 const device = sonos => ({ id: 'upnp:room', uuid: 'RINCON_20', name: 'Kitchen', host: '192.168.1.20', sonos,
   services: { AVTransport: svc('AVTransport'), RenderingControl: svc('RenderingControl'), ...(sonos ? { GroupRenderingControl: svc('GroupRenderingControl') } : {}) } })
-function fixture(sonos = true) {
+function fixture(sonos = true, converted) {
   const commands = []; const released = []; let uri = ''; let state = 'PLAYING'; let failStop = false; let metadata = ''; let currentUri = ''
   const fetchImpl = async (url, options) => {
     const action = options.headers.SOAPAction.match(/#([^" ]+)/)[1]
@@ -21,7 +21,7 @@ function fixture(sonos = true) {
     if (/Get.*Mute/.test(action)) return response('<CurrentMute>0</CurrentMute>')
     return response('')
   }
-  const media = { prepare: async track => ({ trackId: String(track.id), url: `http://192.168.1.4/media/${track.id}`, duration: 180,
+  const media = { prepare: async track => ({ trackId: String(track.id), url: `http://192.168.1.4/media/${track.id}`, duration: 180, converted,
     mime: 'audio/flac', metadata: { title: `A & B <${track.id}>`, artist: 'Artist', albumName: 'Album', images: [{ url: 'http://192.168.1.4/art.jpg' }] } }), release: item => released.push(item) }
   const server = { start: async () => {}, stop: () => {} }
   const controller = new UpnpController({ media, server, fetchImpl })
@@ -77,6 +77,36 @@ test('repeated Sonos tracks get distinct numeric IDs in the actual queue request
     .map(c => parseXml(value(c.doc, 'EnqueuedURIMetaData')))
   assert.deepEqual(metadata.map(doc => nodes(doc, 'item')[0].attrs.id), ['1', '2', '3'])
   assert.equal(value(metadata[0], 'res'), value(metadata[1], 'res'))
+})
+test('Sonos uses its own cover URL when supported and retains the sender cover otherwise', async t => {
+  const f = fixture(true, false)
+  t.after(() => f.controller.cleanup())
+  f.controller.fetch = async (url, options) => {
+    if (options.method === 'POST') return f.fetchImpl(url, options)
+    const art = new URL(url)
+    assert.equal(art.origin, 'http://192.168.1.20')
+    assert.equal(art.pathname, '/getaa')
+    const succeed = art.searchParams.get('u').endsWith('/a')
+    return new Response(succeed ? Uint8Array.of(255, 216, 255) : '', {
+      status: succeed ? 200 : 404, headers: { 'content-type': 'image/jpeg' },
+    })
+  }
+  await f.controller.connect(device(true))
+  await f.controller.setWindow({ current: { id: 'a' }, upcoming: [{ id: 'b' }] })
+  const queued = f.commands.filter(c => c.action === 'AddURIToQueue')
+  assert.equal(value(queued[0].doc, 'DesiredFirstTrackNumberEnqueued'), '1')
+  const artwork = command => value(parseXml(value(command.doc, 'EnqueuedURIMetaData')), 'albumArtURI')
+  assert.equal(artwork(queued[0]), '/getaa?u=http%3A%2F%2F192.168.1.4%2Fmedia%2Fa')
+  assert.equal(artwork(queued[1]), 'http://192.168.1.4/art.jpg')
+})
+test('Sonos acknowledging zero added tracks prevents starting an empty queue', async t => {
+  const f = fixture()
+  t.after(() => f.controller.cleanup())
+  f.controller.fetch = (url, options) => options.headers.SOAPAction.includes('#AddURIToQueue')
+    ? response('<NumTracksAdded>0</NumTracksAdded>') : f.fetchImpl(url, options)
+  await f.controller.connect(device(true))
+  await assert.rejects(f.controller.setWindow({ current: { id: 'a' } }), /requested queue position/)
+  assert(!f.commands.some(c => c.action === 'Play'))
 })
 test('receiver queue advancement reports its new song and clock', async t => {
   const f = fixture(); t.after(() => f.controller.cleanup()); await f.controller.connect(device(true))
