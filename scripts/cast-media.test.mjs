@@ -136,7 +136,7 @@ test('Sonos can fetch a JPEG when a queue entry is missing its library WebP cove
     trackRow: id => ({ id, file_path: song, codec: 'MPEG 1 Layer 3', artwork_path: cover }),
   })
   const prepared = await media.prepare({ id: 'local', artwork_path: null }, { deviceHost: '127.0.0.1', receiver: 'sonos' })
-  const url = value(parseXml(didl(prepared)), 'albumArtURI')
+  const url = value(parseXml(didl(prepared, { sonosQueueId: 1 })), 'albumArtURI')
   assert.match(url, /\/cover\.jpg$/)
   const head = await fetch(url, { method: 'HEAD' })
   assert.equal(head.headers.get('content-type'), 'image/jpeg')
