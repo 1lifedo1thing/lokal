@@ -9,7 +9,7 @@
 
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { api } from '../api'
-import { usePlayerStore, setOutputRoute } from '../store/player'
+import { usePlayerStore, setOutputRoute, readLocalVolume } from '../store/player'
 import { useCastStore } from './castStore'
 import { castWindow, windowKey, castPosition, locate, receiverLyrics, UP_NEXT } from './castWindow'
 import { showToast } from '../components/Toaster'
@@ -412,7 +412,7 @@ export function useCastPlayback(helpers) {
         isPlaying: keepPlaying,
         isBuffering: false,
         progress: position,
-        volume: session.localVolume ?? state.volume,
+        volume: readLocalVolume(state.volumeBoostEnabled, session.localVolume ?? state.volume),
       })
       if (reason === 'lost') showToast(`Lost the connection to ${session.device?.name || 'the TV'}. Paused here.`)
       else if (reason === 'stopped') showToast(`Casting to ${session.device?.name || 'the TV'} ended. Paused here.`)
