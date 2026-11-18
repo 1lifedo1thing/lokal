@@ -10,7 +10,7 @@ import { useShallow } from 'zustand/react/shallow'
 import LyricsPanel from './LyricsPanel'
 import { cacheLyrics, hasLyricLines, peekLyrics } from '../lyrics/lyricsCache'
 import ArtworkBackdrop, { useArtworkBackdropEnabled } from './ArtworkBackdrop'
-import MotionCover, { loadMotionCover } from './MotionCover'
+import MotionCover, { loadMotionCover, useMotionCoverRevision } from './MotionCover'
 import LikeBurst from './LikeBurst'
 import { useMotionCoverOff } from '../motionCoverPrefs'
 import MixCovers from './MixCovers'
@@ -317,15 +317,16 @@ export default function FullscreenPlayer() {
   const [settings, setSettings] = useState({})
   // Whether the song has a Canvas / moving cover (asked even while it's
   // turned off, so its button stays to turn it back on).
+  const motionCoverRevision = useMotionCoverRevision(currentTrack?.id)
   const [coverClip, setCoverClip] = useState({ id: null, clip: null })
   useEffect(() => {
     const id = currentTrack?.id
     if (!id || !(showFullscreen || showLyricsFullscreen) || settings.fullscreen_visual_mode === 'turntable') return undefined
     let current = true
-    loadMotionCover(id).then(clip => { if (current) setCoverClip({ id, clip: clip?.src ? clip : null }) })
+    loadMotionCover(id).then(clip => { if (current) setCoverClip({ id, revision: motionCoverRevision, clip: clip?.src ? clip : null }) })
     return () => { current = false }
-  }, [currentTrack?.id, showFullscreen, showLyricsFullscreen, settings.fullscreen_visual_mode])
-  const clipNow = coverClip.id === currentTrack?.id ? coverClip.clip : null
+  }, [currentTrack?.id, showFullscreen, showLyricsFullscreen, settings.fullscreen_visual_mode, motionCoverRevision])
+  const clipNow = coverClip.id === currentTrack?.id && coverClip.revision === motionCoverRevision ? coverClip.clip : null
   const { video: musicVideo } = useMusicVideo(currentTrack, showFullscreen || showLyricsFullscreen)
   const showMusicVideo = useMusicVideoView(s => s.show)
   const clipName = clipNow && (clipNow.tall || clipNow.source === 'spotify') ? 'Canvas' : 'Moving Cover'

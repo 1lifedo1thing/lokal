@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtempSync, rmSync, writeFileSync, unlinkSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, unlinkSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { createRequire } from 'node:module'
@@ -62,7 +62,7 @@ test('expired Apple HLS metadata serves the completed local MP4 offline, without
   const requests = noNetwork(t)
   index('apple,tidal,community|v3', apple)
   const file = clip(apple)
-  const result = await motionCoverFor(db, track, { cacheDir })
+  const result = await motionCoverFor(db, track, { cacheDir, offline: true })
   assert.deepEqual(result, { file, source: 'apple', tall: false })
   assert.equal(requests(), 0)
 })
@@ -75,6 +75,7 @@ test('Spotify Canvas survives lookup TTL, session expiry, source reorder and old
   const file = clip(canvas)
   const result = await motionCoverFor(db, track, {
     cacheDir,
+    offline: true,
     settings: {
       motion_cover_sources: JSON.stringify(['apple', 'tidal', 'spotify']),
       spotify_sp_dc: 'stale-but-cached-session',
@@ -160,15 +161,14 @@ test('an evicted, empty or partial clip is never presented as a valid offline co
   assert.equal(result, null)
   assert.ok(requests() > 0, 'missing local media falls through to normal provider resolution')
 
-  // Simulate a separate historical lookup still pointing to a damaged file.
-  // The unsuccessful online refresh above may have replaced its own row.
-  index('apple,tidal,community|v3', apple)
+  // Simulate a fresh source lookup whose target clip was damaged.
+  index('source-v1|apple', apple, Date.now())
   const corrupted = clip(apple, { bytes: 32 })
   const previousRequests = requests()
   const result2 = await motionCoverFor(db, track, { cacheDir })
   assert.equal(result2, null)
   assert.ok(requests() > previousRequests)
-  unlinkSync(corrupted)
+  assert.equal(existsSync(corrupted), false)
 })
 
 test('cached clips never leak across different artists or titles', async t => {
