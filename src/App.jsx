@@ -494,7 +494,13 @@ export default function App() {
     return () => { unsubscribe?.(); clearInterval(interval) }
   }, [])
 
-  useEffect(() => api.onLibraryChanged?.(() => {
+  useEffect(() => api.onLibraryChanged?.(change => {
+    if (change?.videoClips?.length) {
+      usePlayerStore.getState().syncTracks(change.videoClips)
+      for (const { id } of change.videoClips) {
+        window.dispatchEvent(new CustomEvent('lokal:music-video-edited', { detail: { trackId: id } }))
+      }
+    }
     window.dispatchEvent(new Event('lokal:refresh'))
   }), [])
 
