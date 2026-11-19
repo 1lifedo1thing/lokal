@@ -3,7 +3,7 @@ import { readViewState, writeViewState } from '../statePersistence.mjs'
 import { usePanelWidths, usePanelWidth, PanelResizeHandle } from '../panelWidths.jsx'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Plus, Heart, LogIn, LogOut, PanelLeftClose, PanelLeftOpen, Sparkles, Import, MoreHorizontal, RefreshCw, ListMusic, Eye, EyeOff, Pin, PinOff, Search, X } from 'lucide-react'
-import { useAppStore } from '../store/player'
+import { useAppStore, usePlayerStore } from '../store/player'
 import { api, peekSettings } from '../api'
 import { SIDEBAR_ITEMS, sidebarNavOrder, splitSidebarNav } from '../sidebarNav'
 import { latestPeriod, listenerTimeZone, nextPeriodBoundary, recapOpened, recapTree } from '../recapPeriods'
@@ -148,6 +148,7 @@ export default function Sidebar() {
   const { visible: visibleNav, hidden: hiddenNav } = splitSidebarNav(sidebarNavOrder(sidebarNavValue))
   
   const { user, openAuth, logout } = useAppStore()
+  const hasLikedSongs = usePlayerStore(state => state.likedIds.size > 0)
   const [collapsed, setCollapsed] = useState(readCollapsed)
   const pins = readPlaylistPins(user?.id)
   const pinned = new Set(pins)
@@ -454,9 +455,9 @@ export default function Sidebar() {
   const providers = api.isElectron ? [
     { provider: 'spotify', title: 'Spotify', playlists: spotifyPlaylists, accountId: spotifyAccountId, loading: spotifyLoading, error: spotifyError, refresh: refreshSpotifyPlaylists },
     { provider: 'youtube', title: 'YouTube', playlists: youtubePlaylists, accountId: youtubeAccountId, loading: youtubeLoading, error: youtubeError, refresh: refreshYoutubePlaylists },
-  ].map(section => ({
+  ].filter(section => section.accountId).map(section => ({
     ...section,
-    rows: section.accountId ? section.playlists.filter(matches) : [],
+    rows: section.playlists.filter(matches),
     hidden: new Set(hiddenPlaylistIds(section.provider, section.accountId)),
   })) : []
   const localRows = playlists.filter(matches)
@@ -468,7 +469,7 @@ export default function Sidebar() {
       if (pinned.has(key) && !hidden.has(pl.id)) matchingPins.set(key, renderProviderRow(provider, accountId, hidden, pl))
     }
   }
-  const likedMatches = matches({ name: t('Liked Songs') })
+  const likedMatches = hasLikedSongs && matches({ name: t('Liked Songs') })
   const noMatches = searchWords.length > 0 && !likedMatches && !localRows.length && providers.every(section => !section.rows.length)
 
   return (

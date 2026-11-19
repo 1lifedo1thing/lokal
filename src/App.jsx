@@ -1937,11 +1937,10 @@ export default function App() {
       }, Math.max(0, delay))
     }
     const elapsed = Date.now() - lastSync
+    initLiked([])
+    load()
     if (elapsed > syncCooldownMs || pendingPage) {
-      if (pendingPage) load()
       scheduleSync(pendingPage || 1, Math.max(0, syncCooldownMs - Math.max(0, elapsed)))
-    } else {
-      load()
     }
     // A download that added songs: a liked streamed song may now be a file
     // with an id of its own (its like moved to it), so reload the hearts.
