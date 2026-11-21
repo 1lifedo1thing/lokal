@@ -8,6 +8,8 @@ on:
       - 'src/api.js'
       - 'src/pages/Albums.jsx'
       - 'src/pages/Search.jsx'
+      - 'src/pages/Recap.jsx'
+      - 'src/components/RecapStory.jsx'
       - 'src/recapText.js'
       - 'src/components/RecapStories.jsx'
       - 'src/components/DiscoveryImage.jsx'
