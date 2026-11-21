@@ -25,12 +25,12 @@ test('album cards and hero load originals over existing thumbnails with fallback
 })
 
 test('recent search upgrades local track and album thumbnails to full artwork', () => {
-  assert.match(search, /api\\.fullArtworkURL\\(item\\.id\\)/)
-  assert.match(search, /api\\.albumFullArtURL\\(item\\)/)
+  assert.ok(search.includes('api.fullArtworkURL(item.id)'))
+  assert.ok(search.includes('api.albumFullArtURL(item)'))
   assert.match(search, /loading="lazy"/)
 })
 
 test('recap pages and story overlays use full-size local artwork', () => {
-  assert.match(recapText, /api\\.fullArtworkURL\\(track\\.id\\)/)
-  assert.match(recapStories, /api\\.fullArtworkURL\\(track\\.id\\)/)
+  assert.ok(recapText.includes('api.fullArtworkURL(track.id)'))
+  assert.ok(recapStories.includes('api.fullArtworkURL(track.id)'))
 })
