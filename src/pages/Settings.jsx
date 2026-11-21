@@ -766,8 +766,14 @@ export default function Settings() {
   }
 
   const installUpdate = async () => {
-    const result = await api.updaterInstall()
-    if (result?.error) setLinuxUpdate(current => ({ ...current, phase: 'error', error: result.error }))
+    setLinuxUpdate(current => ({ ...current, phase: 'installing', error: '' }))
+    try {
+      const result = await api.updaterInstall()
+      if (result?.error) setLinuxUpdate(current => ({ ...current, phase: 'error', error: result.error }))
+      else if (!result?.installing) setLinuxUpdate(current => ({ ...current, phase: 'error', error: t('The package installer did not start') }))
+    } catch (error) {
+      setLinuxUpdate(current => ({ ...current, phase: 'error', error: error?.message || String(error) }))
+    }
   }
 
   // Saves one performance field. On failure only that field (and its error)
@@ -1397,6 +1403,9 @@ activeCategory === 'data' ? usersTried
               )}
               {linuxUpdate.phase === 'ready' && (
                 <button onClick={installUpdate} className="px-3 py-2 rounded-lg bg-accent text-white text-sm">{t('Install and restart')}</button>
+              )}
+              {linuxUpdate.phase === 'installing' && (
+                <span className="text-xs text-muted">{t('Installing update. Complete the system authentication prompt to continue...')}</span>
               )}
               {linuxUpdate.phase === 'error' && (
                 <span role="alert" className="text-xs text-red-400">{linuxUpdate.error}</span>
