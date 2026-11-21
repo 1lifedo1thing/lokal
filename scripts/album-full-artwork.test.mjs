@@ -10,6 +10,7 @@ const recapText = readFileSync(new URL('../src/recapText.js', import.meta.url), 
 const recapStories = readFileSync(new URL('../src/components/RecapStories.jsx', import.meta.url), 'utf8')
 const recap = readFileSync(new URL('../src/pages/Recap.jsx', import.meta.url), 'utf8')
 const recapStory = readFileSync(new URL('../src/components/RecapStory.jsx', import.meta.url), 'utf8')
+const home = readFileSync(new URL('../src/pages/Home.jsx', import.meta.url), 'utf8')
 
 test('pre-existing library album rows retain a trusted artwork track id', () => {
   assert.match(scanner, /artwork_track_id:\s*artworkTrackId/)
@@ -40,4 +41,14 @@ test('recap surfaces use full-size local art and provider-aware remote images', 
   assert.ok(recap.includes('<QualityImage'))
   assert.ok(recapStory.includes('<QualityImage'))
   assert.ok(recapStories.includes('<QualityImage'))
+})
+
+test('Your Mixes cards prefer full-size local artwork and keep the thumbnail as fallback', () => {
+  assert.match(home, /trackFullArtURL/)
+  assert.ok(home.includes('function MixArtwork({ track })'))
+  assert.ok(home.includes('QualityImage src={thumbnail}'))
+  assert.ok(home.includes('QualityImage src={full}'))
+  assert.ok(home.includes('onError={() => setFailed(true)}'))
+  assert.ok(home.includes('MixArtwork track={arts[0]}'))
+  assert.ok(home.includes('MixArtwork track={track}'))
 })
