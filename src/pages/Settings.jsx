@@ -480,6 +480,16 @@ export default function Settings() {
   usePageReady(settingsLoaded && (!api.isElectron || (!!appVersion && !!toolsStatus)))
   const [checkingUpdate, setCheckingUpdate] = useState(false)
   const [updateCheckResult, setUpdateCheckResult] = useState('')
+  const [linuxUpdate, setLinuxUpdate] = useState({ phase: 'idle', version: '', progress: 0, error: '' })
+  useEffect(() => {
+    if (!api.isElectron) return undefined
+    return api.onUpdaterEvent((event, payload) => {
+      if (event === 'available') setLinuxUpdate({ phase: 'available', version: payload?.version || '', progress: 0, error: '' })
+      else if (event === 'progress') setLinuxUpdate(current => ({ ...current, phase: 'downloading', progress: Math.max(0, Math.min(100, Number(payload?.percent) || 0)) }))
+      else if (event === 'ready') setLinuxUpdate(current => ({ ...current, phase: 'ready', progress: 100, error: '' }))
+      else if (event === 'error') setLinuxUpdate(current => ({ ...current, phase: 'error', error: String(payload || 'Update failed') }))
+    })
+  }, [])
   const [statusMessage, setStatusMessage] = useState('')
   const [statusMessageValues, setStatusMessageValues] = useState(null)
   const [statusMessageIsError, setStatusMessageIsError] = useState(false)
@@ -715,29 +725,54 @@ export default function Settings() {
     if (!api.isElectron) return
     setCheckingUpdate(true)
     setUpdateCheckResult('')
+    setLinuxUpdate({ phase: 'checking', version: '', progress: 0, error: '' })
     try {
       const result = await api.updaterCheck()
       if (result?.store) {
-        setUpdateCheckResult('')
         setCheckingUpdate(false)
         await api.openExternal('ms-windows-store://downloadsandupdates')
         return
       }
       if (result?.nightly) {
-        // Nightlies aren't offered the stable release; they update by hand.
-        setUpdateCheckResult('')
         setCheckingUpdate(false)
-        api.openExternal('https://github.com/lokal-music/Desktop/releases')
+        api.openExternal('https://github.com/lokal-music/desktop/releases')
         return
       }
-      setUpdateCheckResult(t('Checking for updates...'))
-      setTimeout(() => {
-        setUpdateCheckResult('')
-        setCheckingUpdate(false)
-      }, 5000)
+      if (result?.available) {
+        setLinuxUpdate({ phase: 'available', version: result.version || '', progress: 0, error: '' })
+        setUpdateCheckResult(t('Update available'))
+      } else if (result?.current) {
+        setLinuxUpdate({ phase: 'current', version: result.version || '', progress: 0, error: '' })
+        setUpdateCheckResult(t('Lokal is up to date'))
+      } else if (result?.error) {
+        setLinuxUpdate({ phase: 'error', version: '', progress: 0, error: result.error })
+        setUpdateCheckResult(result.error)
+      } else {
+        setUpdateCheckResult(t('Checking for updates...'))
+      }
     } catch (e) {
-      setUpdateCheckResult(t('Error checking for updates'))
+      setLinuxUpdate({ phase: 'error', version: '', progress: 0, error: e?.message || String(e) })
+      setUpdateCheckResult(e?.message || t('Error checking for updates'))
+    } finally {
       setCheckingUpdate(false)
+    }
+  }
+
+  const downloadUpdate = async () => {
+    setLinuxUpdate(current => ({ ...current, phase: 'downloading', progress: 0, error: '' }))
+    const result = await api.updaterDownload()
+    if (result?.error) setLinuxUpdate(current => ({ ...current, phase: 'error', error: result.error }))
+    else if (result?.downloaded) setLinuxUpdate(current => ({ ...current, phase: 'ready', progress: 100 }))
+  }
+
+  const installUpdate = async () => {
+    setLinuxUpdate(current => ({ ...current, phase: 'installing', error: '' }))
+    try {
+      const result = await api.updaterInstall()
+      if (result?.error) setLinuxUpdate(current => ({ ...current, phase: 'error', error: result.error }))
+      else if (!result?.installing) setLinuxUpdate(current => ({ ...current, phase: 'error', error: t('The package installer did not start') }))
+    } catch (error) {
+      setLinuxUpdate(current => ({ ...current, phase: 'error', error: error?.message || String(error) }))
     }
   }
 
@@ -1358,7 +1393,22 @@ activeCategory === 'data' ? usersTried
                 {checkingUpdate ? t('Checking...') : isWindowsStore ? t('Open Microsoft Store') : /-nightly\./i.test(appVersion || '') ? t('Open Releases') : t('Check for updates')}
               </button>
               {updateCheckResult && (
-                <span className="text-xs text-muted">{t(updateCheckResult)}</span>
+                <span className="text-xs text-muted">{updateCheckResult}</span>
+              )}
+              {linuxUpdate.phase === 'available' && (
+                <button onClick={downloadUpdate} className="px-3 py-2 rounded-lg bg-accent text-white text-sm">{t('Download update')} {linuxUpdate.version}</button>
+              )}
+              {linuxUpdate.phase === 'downloading' && (
+                <span className="text-xs text-muted">{t('Downloading update')} {linuxUpdate.progress}%</span>
+              )}
+              {linuxUpdate.phase === 'ready' && (
+                <button onClick={installUpdate} className="px-3 py-2 rounded-lg bg-accent text-white text-sm">{t('Install and restart')}</button>
+              )}
+              {linuxUpdate.phase === 'installing' && (
+                <span className="text-xs text-muted">{t('Installing update. Complete the system authentication prompt to continue...')}</span>
+              )}
+              {linuxUpdate.phase === 'error' && (
+                <span role="alert" className="text-xs text-red-400">{linuxUpdate.error}</span>
               )}
             </div>
           </Row>

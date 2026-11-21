@@ -19,6 +19,7 @@ function createLinuxDebUpdater(options = {}) {
   const writeFile = options.writeFile || fs.writeFile
   const tempDir = options.tmpdir || os.tmpdir
   const spawnProcess = options.spawn || spawn
+  const platform = options.platform || process.platform
   const emit = options.onEvent || (() => {})
   const onInstallStart = options.onInstallStart || (() => {})
   const onInstallError = options.onInstallError || (() => {})
@@ -104,8 +105,13 @@ function createLinuxDebUpdater(options = {}) {
     installing = true
     onInstallStart()
     let child
+    let output = ''
     try {
-      child = spawnProcess('pkexec', ['apt-get', 'install', '-y', downloadedPath], { stdio: 'ignore' })
+      if (platform !== 'linux') throw new Error('The Linux package installer can only run on Linux')
+      child = spawnProcess('pkexec', ['apt-get', 'install', '-y', downloadedPath], { stdio: ['ignore', 'pipe', 'pipe'] })
+      const collect = chunk => { output = (output + String(chunk)).slice(-12000) }
+      child.stdout?.on('data', collect)
+      child.stderr?.on('data', collect)
     } catch (error) {
       installing = false
       onInstallError(error)
@@ -120,7 +126,10 @@ function createLinuxDebUpdater(options = {}) {
     child.once('close', code => {
       if (code !== 0) {
         installing = false
-        const message = code === null ? 'The package installer was cancelled or could not start' : 'Lokal package installation failed (exit code ' + code + ')'
+        const detail = output.trim().split('\n').slice(-8).join('\n')
+        const message = code === null
+          ? 'The package installer was cancelled or could not start'
+          : 'Lokal package installation failed (exit code ' + code + ')' + (detail ? ': ' + detail : '')
         onInstallError(new Error(message))
         send('error', message)
         return
