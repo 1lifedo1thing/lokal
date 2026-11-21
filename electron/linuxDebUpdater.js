@@ -2,9 +2,21 @@
 const fs = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
-const { spawn } = require('node:child_process')
+const { execFileSync, spawn } = require('node:child_process')
 const RELEASE_URL = 'https://api.github.com/repos/lokal-music/desktop/releases/tags/desktop'
 const PACKAGE_NAME = 'lokal-music'
+function getInstalledDebVersion(execFile = execFileSync) {
+  let version
+  try {
+    version = execFile('dpkg-query', ['--show', '--showformat=${Version}', PACKAGE_NAME], { encoding: 'utf8' }).trim()
+  } catch (error) {
+    throw new Error('Could not read the installed Lokal DEB version with dpkg-query: ' + (error.message || String(error)), { cause: error })
+  }
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+    throw new Error('dpkg-query returned an invalid installed Lokal DEB version: ' + (version || '(empty)'))
+  }
+  return version
+}
 function compareVersions(left, right) {
   const a = String(left).split('.').map(Number), b = String(right).split('.').map(Number)
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
@@ -59,9 +71,10 @@ function createLinuxDebUpdater(options = {}) {
       const data = await getRelease()
       const version = versionOf(data)
       if (!version) throw new Error('The stable release does not declare a valid Lokal version')
-      if (compareVersions(version, getVersion()) <= 0) {
-        send('current', { version: getVersion() })
-        return { current: true, version: getVersion() }
+      const installedVersion = getVersion()
+      if (compareVersions(version, installedVersion) <= 0) {
+        send('current', { version: installedVersion })
+        return { current: true, version: installedVersion }
       }
       assetFor(data, version)
       send('available', { version, releaseName: data.name, releaseNotes: data.body || '' })
@@ -140,4 +153,4 @@ function createLinuxDebUpdater(options = {}) {
   }
   return { check, download, install }
 }
-module.exports = { compareVersions, createLinuxDebUpdater }
+module.exports = { compareVersions, createLinuxDebUpdater, getInstalledDebVersion }
