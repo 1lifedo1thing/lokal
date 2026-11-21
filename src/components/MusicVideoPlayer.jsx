@@ -6,7 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { usePlayerStore } from '../store/player'
 import LyricsPanel from './LyricsPanel'
 import { api, wordSyncEnabled } from '../api'
-import { trackArtURL } from '../onlineTracks'
+import { trackArtURL, trackFullArtURL } from '../onlineTracks'
 import { useMusicVideo, useMusicVideoView, songTime, useVideoOffsets, withOffset } from '../musicVideo'
 import VideoOffsetControl from './VideoOffsetControl'
 import { syncVideo, seekVideo, playbackVideoTime } from '../musicVideoPlayback'
@@ -239,7 +239,7 @@ export default function MusicVideoPlayer({ compact = false }) {
     }
   }, [video, segments, fallbackKey, foundVideo?.clip?.link])
 
-  const art = trackArtURL(currentTrack)
+  const art = trackFullArtURL(currentTrack) || trackArtURL(currentTrack)
   const showVideo = !!video?.src && !video.error && !failed && (ready || everPlayed) && !outside
   const status = loading ? 'loading'
     : !video ? 'none'
