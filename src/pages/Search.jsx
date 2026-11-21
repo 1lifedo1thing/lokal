@@ -11,6 +11,7 @@ import TrackList from '../components/TrackList'
 import OnlineResults from '../components/OnlineResults'
 import GlobalCatalogueResults from '../components/GlobalCatalogueResults'
 import OnlineLyricsSearch from '../components/OnlineLyricsSearch'
+import QualityImage from '../components/QualityImage'
 import LyricsSearchResult from '../components/LyricsSearchResult'
 import LinkDownload from '../components/LinkDownload'
 import { api } from '../api'
@@ -319,7 +320,7 @@ export default function Search() {
                             <img src={api.fullArtworkURL(item.id)} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy" decoding="async" onError={event => { event.currentTarget.style.display = 'none' }} />
                           </div>
                         ) : item.artwork_url ? (
-                          <img src={item.artwork_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" decoding="async" />
+                          <QualityImage src={item.artwork_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" decoding="async" />
                         ) : (
                           <Music size={20} />
                         )
