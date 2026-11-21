@@ -126,7 +126,7 @@ function createLinuxDebUpdater(options = {}) {
     child.once('close', code => {
       if (code !== 0) {
         installing = false
-        const detail = output.trim().split('\\n').slice(-8).join('\\n')
+        const detail = output.trim().split('\n').slice(-8).join('\n')
         const message = code === null
           ? 'The package installer was cancelled or could not start'
           : 'Lokal package installation failed (exit code ' + code + ')' + (detail ? ': ' + detail : '')
