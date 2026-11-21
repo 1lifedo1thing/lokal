@@ -8,6 +8,8 @@ const scanner = readFileSync(new URL('../electron/ipc/scanner.js', import.meta.u
 const search = readFileSync(new URL('../src/pages/Search.jsx', import.meta.url), 'utf8')
 const recapText = readFileSync(new URL('../src/recapText.js', import.meta.url), 'utf8')
 const recapStories = readFileSync(new URL('../src/components/RecapStories.jsx', import.meta.url), 'utf8')
+const recap = readFileSync(new URL('../src/pages/Recap.jsx', import.meta.url), 'utf8')
+const recapStory = readFileSync(new URL('../src/components/RecapStory.jsx', import.meta.url), 'utf8')
 
 test('pre-existing library album rows retain a trusted artwork track id', () => {
   assert.match(scanner, /artwork_track_id:\s*artworkTrackId/)
@@ -24,13 +26,18 @@ test('album cards and hero load originals over existing thumbnails with fallback
   assert.match(albums, /fullArtSrc !== artSrc/, 'original load is conditional')
 })
 
-test('recent search upgrades local track and album thumbnails to full artwork', () => {
+test('recent search upgrades local and remote track and album artwork', () => {
   assert.ok(search.includes('api.fullArtworkURL(item.id)'))
   assert.ok(search.includes('api.albumFullArtURL(item)'))
+  assert.ok(search.includes('<QualityImage src={item.artwork_url}'))
   assert.match(search, /loading="lazy"/)
 })
 
-test('recap pages and story overlays use full-size local artwork', () => {
+test('recap surfaces use full-size local art and provider-aware remote images', () => {
   assert.ok(recapText.includes('api.fullArtworkURL(track.id)'))
   assert.ok(recapStories.includes('api.fullArtworkURL(track.id)'))
+  assert.ok(recapStories.includes("track?.artwork_url || ''"))
+  assert.ok(recap.includes('<QualityImage'))
+  assert.ok(recapStory.includes('<QualityImage'))
+  assert.ok(recapStories.includes('<QualityImage'))
 })
