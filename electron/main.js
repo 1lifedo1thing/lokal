@@ -18,7 +18,7 @@ Object.assign(console, log.functions)
 
 const { autoUpdater } = require('electron-updater')
 const { createUpdateInstaller, shouldQuitOnWindowClosed } = require('./updaterInstall')
-const { createLinuxDebUpdater } = require('./linuxDebUpdater')
+const { createLinuxDebUpdater, getInstalledDebVersion } = require('./linuxDebUpdater')
 const { initDB, getDB, getStorageDir } = require('./ipc/db')
 const { createAutomaticBackups } = require('./automaticBackups')
 const { registerAutomaticBackupIpc } = require('./automaticBackupIpc')
@@ -190,7 +190,7 @@ const IS_NIGHTLY = /-nightly\./i.test(app.getVersion())
 const IS_WINDOWS_STORE = process.windowsStore === true
 const IS_LINUX_DEB = process.platform === 'linux' && app.isPackaged && !process.env.APPIMAGE && !process.env.FLATPAK_ID && !process.env.SNAP
 const linuxDebUpdater = createLinuxDebUpdater({
-  getVersion: () => app.getVersion(),
+  getVersion: getInstalledDebVersion,
   arch: process.arch,
   onEvent: (event, data) => {
     if (!mainWindow || mainWindow.isDestroyed()) return
@@ -1040,7 +1040,7 @@ ipcMain.handle('updater:install', () => IS_LINUX_DEB ? linuxDebUpdater.install()
     return { checking: true }
   })
   ipcMain.handle('app:getVersion', () => {
-    return app.getVersion()
+    return IS_LINUX_DEB ? getInstalledDebVersion() : app.getVersion()
   })
   ipcMain.handle('app:isWindowsStore', () => IS_WINDOWS_STORE)
 
