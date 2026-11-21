@@ -12,9 +12,6 @@ on:
       - electron/linuxDebUpdater.js
       - electron/main.js
       - scripts/linux-deb-updater.test.mjs
-      - electron/linuxDebUpdater.js
-      - electron/main.js
-      - scripts/linux-deb-updater.test.mjs
   push:
     branches: [main]
     paths:
@@ -25,6 +22,9 @@ on:
       - scripts/desktop_releases.py
       - scripts/test_desktop_releases.py
       - scripts/desktop-updater-release.test.cjs
+      - electron/linuxDebUpdater.js
+      - electron/main.js
+      - scripts/linux-deb-updater.test.mjs
   workflow_dispatch:
 permissions:
   contents: read
