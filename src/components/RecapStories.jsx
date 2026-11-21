@@ -22,7 +22,7 @@ function fmtHour(hour) {
 
 function trackArt(track) {
   if (!track?.artwork_path) return ''
-  return api.isElectron ? api.fileURL(track.artwork_path) : api.artworkURL(track.id)
+  return api.fullArtworkURL(track.id)
 }
 
 export default function RecapStories({ open, onClose }) {
