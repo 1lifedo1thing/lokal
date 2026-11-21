@@ -18,6 +18,7 @@ Object.assign(console, log.functions)
 
 const { autoUpdater } = require('electron-updater')
 const { createUpdateInstaller, shouldQuitOnWindowClosed } = require('./updaterInstall')
+const { createLinuxDebUpdater } = require('./linuxDebUpdater')
 const { initDB, getDB, getStorageDir } = require('./ipc/db')
 const { createAutomaticBackups } = require('./automaticBackups')
 const { registerAutomaticBackupIpc } = require('./automaticBackupIpc')
@@ -187,6 +188,21 @@ const IS_NIGHTLY = /-nightly\./i.test(app.getVersion())
 // The Microsoft Store (MSIX) build is updated by the Store itself; an
 // electron-updater install would fail inside the package anyway.
 const IS_WINDOWS_STORE = process.windowsStore === true
+const IS_LINUX_DEB = process.platform === 'linux' && app.isPackaged && !process.env.APPIMAGE && !process.env.FLATPAK_ID && !process.env.SNAP
+const linuxDebUpdater = createLinuxDebUpdater({
+  getVersion: () => app.getVersion(),
+  arch: process.arch,
+  onEvent: (event, data) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    if (event === 'available') mainWindow.webContents.send('updater:available', data)
+    else if (event === 'progress') mainWindow.webContents.send('updater:progress', data)
+    else if (event === 'ready') { updateInstaller.markDownloaded(); mainWindow.webContents.send('updater:ready') }
+    else if (event === 'error') mainWindow.webContents.send('updater:error', data)
+  },
+  onInstallStart: () => { isUpdating = true },
+  onInstallError: error => { isUpdating = false; log.error('[updater] Linux DEB install failed:', error) },
+  onInstalled: () => { app.relaunch(); app.quit() },
+})
 
 autoUpdater.on('update-available', (info) => {
   if (mainWindow) {
@@ -721,7 +737,7 @@ app.whenReady().then(async () => {
   })
 
   ipcMain.handle('updater:download', async () => {
-  return await autoUpdater.downloadUpdate()
+  return IS_LINUX_DEB ? linuxDebUpdater.download() : await autoUpdater.downloadUpdate()
 })
 
   // What's saved (the next launch) plus what this launch is running with, so
@@ -1015,10 +1031,11 @@ ipcMain.on('open-logs', () => {
   }
 });
 
-ipcMain.handle('updater:install', () => updateInstaller.install())
+ipcMain.handle('updater:install', () => IS_LINUX_DEB ? linuxDebUpdater.install() : updateInstaller.install())
   ipcMain.handle('updater:check', () => {
     if (IS_WINDOWS_STORE) return { store: true, version: app.getVersion() }
     if (IS_NIGHTLY) return { nightly: true, version: app.getVersion() }
+    if (IS_LINUX_DEB) return linuxDebUpdater.check()
     autoUpdater.checkForUpdates()
     return { checking: true }
   })
@@ -1061,7 +1078,7 @@ ipcMain.handle('updater:install', () => updateInstaller.install())
     console.log('[updater] automatic update checks are off')
   } else {
     setTimeout(() => {
-      autoUpdater.checkForUpdates().catch(err => {
+      Promise.resolve(IS_LINUX_DEB ? linuxDebUpdater.check() : autoUpdater.checkForUpdates()).catch(err => {
         console.log('[updater] check failed:', err.message)
       })
     }, 3000)
