@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { getDB, getStorageDir } = require('./ipc/db')
-const { rebaseMobileTrackPaths } = require('./mobilePathRelocation')
+const { rebaseMobileTrackPaths, migrateLegacyRoamingMobileFiles } = require('./mobilePathRelocation')
 
 const KEYS = Object.freeze({ downloads: 'download_root', cache: 'cache_root', phone: 'phone_download_root' })
 
@@ -118,6 +118,7 @@ function saveRoot(kind, selected) {
     // the old PC's absolute paths. Rebase paths in the same transaction as
     // the setting so the Library selector repairs an already-restored backup.
     if (kind === 'phone' && root) {
+      migrateLegacyRoamingMobileFiles(database, path.join(getStorageDir(), 'phone-downloads'), root)
       rebaseMobileTrackPaths(database, previousPhoneRoot, root)
     }
     database.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, root)
