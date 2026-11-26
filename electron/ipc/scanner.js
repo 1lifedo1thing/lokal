@@ -757,10 +757,22 @@ const { searchLyricsEntries } = require('../lyrics/librarySearch')
  * files (never downloaded in Lokal), 'addon' any addon, and 'yt', 'sc',
  * 'soulseek', 'web' those downloads. Anything else: no filter.
  */
-function sourceFilter(source) {
+function sourceFilter(source, userId = 'guest', db = null) {
   if (source === 'local') return { sql: 'download_source IS NULL', params: [] }
   if (source === 'addon') return { sql: "download_source LIKE 'a-%'", params: [] }
-  if (['yt', 'sc', 'mono', 'soulseek', 'web', 'mobile'].includes(source)) return { sql: 'download_source = ?', params: [source] }
+  if (source === 'mobile') {
+    // The catalogue maps phone recordings to their desktop rows. Include those
+    // rows even when the desktop already owns a matching file and therefore
+    // correctly retains its original download_source value.
+    let hasCatalog = false
+    try {
+      hasCatalog = !!db?.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='link_mobile_catalog'").get()
+    } catch {}
+    return hasCatalog
+      ? { sql: "(download_source = ? OR id IN (SELECT track_id FROM link_mobile_catalog WHERE user_id = ?))", params: ['mobile', String(userId || 'guest')] }
+      : { sql: 'download_source = ?', params: ['mobile'] }
+  }
+  if (['yt', 'sc', 'mono', 'soulseek', 'web'].includes(source)) return { sql: 'download_source = ?', params: [source] }
   return null
 }
 
@@ -1444,7 +1456,7 @@ function registerScannerHandlers(ipcMain) {
       const match = wordsMatch(search, TRACK_COLUMNS)
       if (match) { where.push(match.sql); params.push(...match.params) }
     }
-    const source = sourceFilter(opts.source)
+    const source = sourceFilter(opts.source, require('./remote').getRemoteState().userId || 'guest', db)
     if (source) { where.push(source.sql); params.push(...source.params) }
     const genre = genreFilter(opts.genre)
     if (genre) { where.push(genre.sql); params.push(...genre.params) }
