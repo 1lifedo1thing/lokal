@@ -6,6 +6,7 @@ const { LinkStore, safeEqual } = require('./store')
 const { installCapture } = require('./capture')
 const { reconcilePlaylists, savePlaylistSnapshot } = require('./reconcile')
 const { createLinkedLibraryRefresh } = require('./libraryRefresh')
+const { createMobileCatalog } = require('./mobileCatalog')
 const { envelope, decode, text } = require('./protocol')
 const { advertise, reconcileDiscovery } = require('./discovery')
 const { createPendingCommands } = require('./pendingCommands')
@@ -19,6 +20,7 @@ function createLink({ server, db, remote, enabled = () => true, advertiseDesktop
   store.currentUser = currentUser
   installCapture(store, currentUser)
   const libraryRefresh = createLinkedLibraryRefresh()
+  const mobileCatalog = createMobileCatalog(db, store)
   const sockets = new Map(), pending = createPendingCommands(), snapshots = new Map()
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 })
   let stopDiscovery
@@ -78,7 +80,7 @@ function createLink({ server, db, remote, enabled = () => true, advertiseDesktop
     sockets.set(device.id,socket)
     socket.alive=true
     socket.on('pong',()=>{socket.alive=true})
-    send(socket,'hello',{desktopId:store.deviceId,name:os.hostname(),platform:process.platform,user:{id:device.user_id},proto:1,capabilities:['remote','handoff','history','library','theme','track_lifecycle'],syncPreview:{history:db.prepare('SELECT COUNT(*) n FROM history_events WHERE user_id=?').get(device.user_id).n,operations:db.prepare('SELECT COUNT(*) n FROM library_ops WHERE user_id=?').get(device.user_id).n}})
+    send(socket,'hello',{desktopId:store.deviceId,name:os.hostname(),platform:process.platform,user:{id:device.user_id},proto:1,capabilities:['remote','handoff','history','library','theme','track_lifecycle','mobile_catalog'],syncPreview:{history:db.prepare('SELECT COUNT(*) n FROM history_events WHERE user_id=?').get(device.user_id).n,operations:db.prepare('SELECT COUNT(*) n FROM library_ops WHERE user_id=?').get(device.user_id).n}})
     send(socket,'state',{...remote.getRemoteState(),target:'desktop'})
     send(socket,'theme',desktopTheme())
     socket.on('message',async raw => {
@@ -120,6 +122,12 @@ function createLink({ server, db, remote, enabled = () => true, advertiseDesktop
             libraryRefresh.accepted(0, store.takeVideoClipChanges())
             send(socket,'library.ops',store.pull('library_ops',device.user_id,body.cursor,{trackLifecycle:socket.capabilities?.has('track_lifecycle')||body.trackLifecycle===true}),message.id)
             break
+          case 'catalog.push': {
+            if (device.legacy) throw new Error('Pair this device before syncing')
+            const result = mobileCatalog.accept({ userId: device.user_id, deviceId: device.id, body })
+            send(socket, 'ack', { ok: true, ...result }, message.id)
+            break
+          }
           case 'library.push': {
             if (device.legacy) throw new Error('Pair this device before syncing')
             // Capture desktop changes before applying phone edits. Snapshot the
