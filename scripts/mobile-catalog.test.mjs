@@ -18,7 +18,8 @@ function fixture() {
     CREATE TABLE tracks (
       id TEXT PRIMARY KEY, file_path TEXT UNIQUE, file_hash TEXT, title TEXT,
       artist TEXT, album TEXT, duration REAL, source_ref TEXT, artwork_url TEXT,
-      download_source TEXT
+      download_source TEXT, album_artist TEXT, track_num INTEGER,
+      disc_num INTEGER, year INTEGER, genre TEXT
     );
   `)
   const store = {
@@ -39,7 +40,7 @@ function fixture() {
   return { db, page }
 }
 
-const song = { title: 'Affection', artist: 'Boys Noize, ABRA', album: 'Affection', duration: 180 }
+const song = { title: 'Affection', artist: 'Boys Noize, ABRA', album: 'Affection', album_artist: 'Boys Noize', track_num: 2, disc_num: 1, year: 2024, genre: 'Electronic', duration: 180 }
 
 test('mobile-only songs become streamable metadata rows and repeated snapshots do not duplicate them', () => {
   const f = fixture()
@@ -83,11 +84,13 @@ test('only a complete snapshot retires songs removed from the phone', () => {
   } finally { f.db.close() }
 })
 
-test('new phone catalogue rows enter the existing mobile-provider resolution flow', async () => {
+test('new phone catalogue rows expose the authenticated Mobile stream source', async () => {
   const { isMobileLinkedTrack } = await import('../src/mobileLinkedTracks.js')
-  const { isPlayable, streamRef } = await import('../src/onlineTracks.js')
+  const { isPlayable, streamRef, audioSrcFor } = await import('../src/onlineTracks.js')
+  const { api } = await import('../src/api.js')
   const track = { id: 'link_phone', file_path: 'ghost://mobile/link_phone', title: song.title, artist: song.artist }
   assert.equal(isMobileLinkedTrack(track), true)
-  assert.equal(isPlayable(track), false, 'metadata is not mistaken for a local audio file')
-  assert.equal(streamRef(track), null, 'the phone source is resolved through this PC, not an exposed file URL')
+  assert.equal(isPlayable(track), true)
+  assert.deepEqual(streamRef(track), { provider: 'mobile', id: 'link_phone' })
+  assert.equal(audioSrcFor(track), api.onlineStreamURL('mobile', 'link_phone'))
 })
